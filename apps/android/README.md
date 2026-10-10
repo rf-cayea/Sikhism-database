@@ -47,15 +47,52 @@ The signing and version-bump items are the same shape as
 [`apps/README.md`](../README.md#store-identity) on both platforms. The Android
 specifics:
 
-1. **Signing config** — release builds are unsigned as written.
-2. **Bump `versionCode`/`versionName`** past the published listing; `1` / `0.1.0`
-   here will be rejected as lower than what is live.
+1. **Signing** — see [Signing](#signing). Without the upload key, release builds
+   are unsigned.
+2. **Bump `versionCode`** on every upload. Play rejects any code it has already
+   seen; the legacy app's highest was 86 (`0.2.0`), so this app starts at 87
+   (`0.3.0`).
 3. **A proper adaptive-icon foreground.** The current one insets the square 1024px
    icon into the safe zone over an approximated gradient, which works but has a
    faint seam. The right fix is a transparent-background lotus exported from
    `brand/assets/lotus.svg`. Play also wants a separate 512×512 listing icon.
 4. **Confirm `targetSdk 36` is still current** — Play's target-API requirement is
    the actual deprecation pressure here.
+
+## Signing
+
+Play App Signing is on: Google holds the key that signs what users install. We
+hold only the **upload key**, which proves an upload came from us. Play rejects
+any upload signed with a different key.
+
+The upload key is `shabados-upload.jks`, alias `upload`, generated with `keytool`
+and registered through Play Console's upload key reset in October 2026. It is not
+the legacy Expo app's key: that one was never found in the `shabados` Expo
+organization's credentials. Whoever holds the keystore and its password can
+release. Keep it in a password manager, never in the repo (`*.jks` is gitignored).
+
+**Custody.** The keystore and its password are held by @bhajneet and @harjot1singh.
+To release, ask one of them for access.
+
+To sign, add to `apps/android/local.properties`:
+
+```
+upload.storeFile=/absolute/path/to/shabados-upload.jks
+upload.storePassword=…
+upload.keyAlias=upload
+upload.keyPassword=…
+```
+
+`app/build.gradle.kts` signs release builds with it when those keys are present.
+Confirm with `keytool -printcert -jarfile app/build/outputs/bundle/release/app-release.aab`.
+The SHA-1 must be `2E:FB:87:D0:5D:F2:76:77:E9:B8:70:79:9E:FA:91:10:01:69:8C:DE`, as
+shown at Play Console → Protected with Play → Play Store protection → *Manage Play
+app signing* → upload key certificate.
+
+If the key is lost: generate a new one, export its certificate
+(`keytool -export -rfc … -file upload_certificate.pem`), and use *Request upload
+key reset* on that same page. Google approves it in a few days, and the new key
+works from a date it states.
 
 ## Deliberately absent
 

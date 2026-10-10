@@ -17,3 +17,7 @@ captures/
 # for four ABIs, rebuilt from source; same reason that package ignores its own
 # staged copies rather than committing them.
 app/src/main/jniLibs/
+
+# The Play upload key. Its passwords live in local.properties; neither is committed.
+*.jks
+*.keystore

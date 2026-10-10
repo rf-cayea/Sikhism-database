@@ -31,8 +31,30 @@ val compileTarget: Pair<Int, Int> = run {
     ?: error("No Android platform installed under $sdkDir/platforms")
 }
 
+/**
+ * Upload-key credentials, read from the gitignored local.properties so no secret is
+ * committed. The key is the one registered in Play Console as the upload key (see
+ * README "Signing"). Play rejects an upload signed with any other key.
+ * Absent on machines without the key, in which case release builds stay unsigned.
+ */
+val uploadKey: Properties? = rootProject.file("local.properties")
+  .takeIf(File::exists)
+  ?.let { f -> Properties().apply { f.inputStream().use(::load) } }
+  ?.takeIf { it.getProperty("upload.storeFile") != null }
+
 android {
   namespace = "com.shabados.android"
+
+  signingConfigs {
+    if (uploadKey != null) {
+      create("upload") {
+        storeFile = rootProject.file(uploadKey.getProperty("upload.storeFile"))
+        storePassword = uploadKey.getProperty("upload.storePassword")
+        keyAlias = uploadKey.getProperty("upload.keyAlias")
+        keyPassword = uploadKey.getProperty("upload.keyPassword")
+      }
+    }
+  }
 
   // compileSdk is a toolchain detail — which SDK jar we compile against — so it is
   // inferred from the machine.
@@ -59,8 +81,10 @@ android {
     // depend on where it was built. It needs no installed platform — it is a
     // declaration. Confirm against Play's current requirement before submitting.
     targetSdk = 36
-    versionCode = 1
-    versionName = "0.1.0"
+    // Play rejects a versionCode at or below any it has seen. The legacy Expo app
+    // reached 86 (named 0.2.0, testing tracks only), so this continues from there.
+    versionCode = 87
+    versionName = "0.3.0"
   }
 
   buildTypes {
@@ -68,6 +92,7 @@ android {
       // No shrinking: there is nothing to shrink yet, and an unverified ProGuard
       // config is a way to ship a release build that crashes where debug does not.
       isMinifyEnabled = false
+      signingConfig = signingConfigs.findByName("upload")
     }
   }
 
