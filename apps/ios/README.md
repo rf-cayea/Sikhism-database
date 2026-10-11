@@ -35,6 +35,7 @@ project edit.
 | Display name | Shabad OS |
 | Icon | `brand/assets/lotus.svg`, via the legacy app's 1024px export |
 | App Privacy | **Data Not Collected** — true: no network, no SDKs |
+| Orientations | iPad: all four (Apple requires it for Split View and resizable windows; Xcode warns without it). iPhone: portrait and both landscapes, Xcode's default — Face ID iPhones never turn upside-down whatever the app allows |
 
 Where the bundle id came from, why changing it forfeits the listing, the
 Sentry/PostHog reduction, and telemetry's ADR status are the same on both platforms
