@@ -32,6 +32,44 @@ rather than of any app. The generator compares it against the deployment target 
 renders as *nothing at all*, with no error — a blank button in front of a
 congregation. It has already caught one, `translate`, which is 17.4.
 
+## Lucide assets
+
+**A `Use Lucide` icon needs its SVG copied into the app; nothing fetches it.** On iOS
+that is an imageset in `apps/ios/ShabadOS/Assets.xcassets` named exactly as the
+Lucide column, holding the upstream SVG unmodified, with *Preserve Vector Data* on
+and *Render As: Template Image* (so it takes the tint like an SF Symbol). Lucide's
+`stroke="currentColor"` needs no change: a template image is drawn from the shape's
+coverage alone, so its colour is irrelevant — verified on iPhone in light and dark
+mode, 2026-10-11. The generator emits these as `LucideIcon`, not a `String`, and
+they are drawn with `Image(lucide:)` — `Image(systemName:)` will not accept one,
+because given an asset name it draws nothing. The generator **warns** when an
+imageset is missing; the release steps in `apps/ios/README.md` check for that
+warning before archiving.
+
+Pin the version and record each copy here. To add one, fetch
+`https://unpkg.com/lucide-static@<version>/icons/<name>.svg`.
+
+| Lucide | Package | Version | Source | Licence | Copied to |
+| --- | --- | --- | --- | --- | --- |
+| `settings-2` | `lucide-static` | 1.55.0 (current on 2026-10-10) | <https://unpkg.com/lucide-static@1.55.0/icons/settings-2.svg> | ISC | `apps/ios/ShabadOS/Assets.xcassets/settings-2.imageset/` |
+
+The licence is ISC, from the package's `LICENSE`; it ships in the SVG's first line as
+`@license lucide-static v1.55.0 - ISC`. A few Lucide icons derived from Feather are
+additionally MIT; check that file's list before adding one. `settings-2` is not on it.
+
+> ISC License — Copyright (c) 2026 Lucide Icons and Contributors
+>
+> Permission to use, copy, modify, and/or distribute this software for any purpose
+> with or without fee is hereby granted, provided that the above copyright notice
+> and this permission notice appear in all copies.
+>
+> THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+> REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+> FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT,
+> OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA
+> OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION,
+> ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
 ## Icons
 
 | Icon | Lucide | SF Symbol | Since | Material Symbol | Use Lucide |

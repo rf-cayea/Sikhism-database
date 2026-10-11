@@ -95,10 +95,19 @@ procedure is then the same for every Admin.
    xcframework is missing, not when it is out of date. A stale one fails to compile
    once the app calls a function added since, or silently ships old behaviour.
 2. **Bump the version and build number** (see [Versions](#versions)).
-3. In Xcode, sign in under Settings → Apple Accounts with an Admin's Apple Account.
+3. **Check for warnings, and deal with each one before archiving.** A warning is
+   how the blank controls button was found, after it had been showing for weeks.
+   Look in three places:
+   - the output of `./apps/build.sh ios` (the icon generator prints `WARNING:` for a
+     Lucide icon with no imageset — it draws blank);
+   - Xcode's issue navigator (⌘5, or click the ⚠ count in the toolbar) after a
+     build;
+   - the run console (⇧⌘C) while using the app on a device — e.g. `No symbol named
+     '…' found in system symbol set` is a blank icon.
+4. In Xcode, sign in under Settings → Apple Accounts with an Admin's Apple Account.
    Then choose *Any iOS Device* as the destination, and Product → Archive.
-4. In the Organizer that opens: Distribute App → App Store Connect → Upload.
-5. In App Store Connect, open the version in *Prepare for Submission*, select the
+5. In the Organizer that opens: Distribute App → App Store Connect → Upload.
+6. In App Store Connect, open the version in *Prepare for Submission*, select the
    build once processing finishes, and Add for Review.
 
 `ITSAppUsesNonExemptEncryption = NO` is set, so uploads skip the export-compliance

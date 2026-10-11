@@ -97,7 +97,7 @@ const swiftIcon = ([name, def]) => {
   const { symbol, minIOS, fallback } = def.ios
   const doc = `  /// ${def.meaning}`
   if (def.useLucide) {
-    return `${doc}\n  /// Lucide \`${def.lucide}\` — an asset, not an SF Symbol.\n  static let ${name} = "${def.lucide}"`
+    return `${doc}\n  /// Lucide \`${def.lucide}\` — an imageset in Assets.xcassets, not an SF Symbol.\n  static let ${name} = LucideIcon(assetName: "${def.lucide}")`
   }
   if (!fallback) return `${doc}\n  /// SF Symbols, iOS ${minIOS}+.\n  static let ${name} = "${symbol}"`
   return `${doc}
@@ -107,10 +107,26 @@ const swiftIcon = ([name, def]) => {
 
 const swift = `${banner('//')}
 
+import SwiftUI
 import UIKit
 
+/// An icon drawn from Lucide rather than SF Symbols: an imageset in Assets.xcassets,
+/// named as in Lucide. A separate type from the SF Symbol names so that
+/// \`Image(systemName:)\` will not accept one — given an asset name it finds no
+/// symbol and draws nothing at all. Draw it with \`Image(lucide:)\`.
+struct LucideIcon {
+  let assetName: String
+}
+
+extension Image {
+  init(lucide icon: LucideIcon) {
+    self.init(icon.assetName)
+  }
+}
+
 /// Icon names shared with the Android app, keyed by what they *mean* rather than by
-/// what they look like. Use \`Image(systemName: AppIcons.zoom)\`.
+/// what they look like. Use \`Image(systemName: AppIcons.zoom)\` for SF Symbols and
+/// \`Image(lucide: AppIcons.controls)\` for the Lucide overrides.
 ///
 /// Availability is checked at generation time against IPHONEOS_DEPLOYMENT_TARGET,
 /// so a symbol newer than the target cannot reach a build without a declared
@@ -179,5 +195,18 @@ const present = existsSync(drawableDir) ? new Set(readdirSync(drawableDir).map((
 const missing = entries.map(([n]) => drawableName(n)).filter((d) => !present.has(d))
 const lucideOverrides = entries.filter(([, d]) => d.useLucide).map(([n]) => n)
 
+// A Lucide override with no imageset draws nothing on iOS, which is how the controls
+// button shipped blank to a device. Warned rather than failed, by the author's choice
+// (2026-10-11): it is caught by the pre-archive warnings check in
+// apps/ios/README.md#releasing, and failing would block every build the moment an
+// icon is marked Use Lucide, before anyone has had a chance to add the asset.
+const assetsDir = join(root, 'apps/ios/ShabadOS/Assets.xcassets')
+const missingImagesets = [...new Set(entries.filter(([, d]) => d.useLucide).map(([, d]) => d.lucide))]
+  .filter((l) => !existsSync(join(assetsDir, `${l}.imageset`)))
+
+for (const l of missingImagesets) {
+  const users = entries.filter(([, d]) => d.useLucide && d.lucide === l).map(([n]) => n).join(', ')
+  console.warn(`WARNING: Lucide "${l}" (${users}) has no apps/ios/ShabadOS/Assets.xcassets/${l}.imageset — it will draw blank on iOS. See "Lucide assets" in packages/design/icons.md.`)
+}
 if (missing.length) console.warn(`warning: ${missing.length}/${entries.length} Android drawables not yet in res/drawable/ — ${missing.slice(0, 4).join(', ')}${missing.length > 4 ? ', …' : ''}`)
 if (lucideOverrides.length) console.log(`note: drawn from Lucide on every target — ${lucideOverrides.join(', ')}`)

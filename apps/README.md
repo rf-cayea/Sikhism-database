@@ -130,9 +130,10 @@ build outputs, not committed, and `mise run android` cannot run under an agent s
 button in front of a congregation. Every symbol's minimum iOS version is recorded in
 `packages/design/icons.md` (verified against the system symbol database) and compared against
 the target read from the project file. It already caught one: `translate` is iOS 17.4
-against a 17.0 target, and now carries a fallback. Its two *warnings* — Android
-drawables not yet imported, Material Symbols names unverified — are work not done
-yet, and do not stop a build.
+against a 17.0 target, and now carries a fallback. Its *warnings* — a `Use Lucide`
+icon with no iOS imageset (which draws blank), Android drawables not yet imported —
+are work not done yet, and do not stop a build; the iOS release steps check for them
+before archiving.
 
 **Colour/type values mirror `apps/web/src/global.css`**, which is where the palette
 was actually designed (in OKLCH, then converted — the `oklch()` comments there are

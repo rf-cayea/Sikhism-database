@@ -477,7 +477,7 @@ struct BaniReaderView: View {
         Toggle(Pronunciation.latin.label, isOn: $pronLatin)
       }
     } label: {
-      Image(systemName: AppIcons.controls)
+      Image(lucide: AppIcons.controls)
     }
   }
 
