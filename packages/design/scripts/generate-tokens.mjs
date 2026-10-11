@@ -44,11 +44,42 @@ const opacity = scalars('Opacity')
 const weight = scalars('Weight')
 const type = scalars('Type')
 
-for (const key of ['defaultSize', 'lineHeight', 'minSize', 'maxSize']) {
+for (const key of ['defaultSize', 'listSize', 'lineHeightRatio', 'minSize', 'phoneMaxSize', 'padMaxSize', 'startingSizeFactor', 'padStartingSize']) {
   if (type[key] === undefined) throw new Error(`packages/design/tokens.md: type.${key} missing`)
 }
-if (opacity.toner === undefined) throw new Error('packages/design/tokens.md: opacity.toner missing')
-const lineHeightRatio = +(type.lineHeight / type.defaultSize).toFixed(4)
+for (const key of ['toner', 'tonerFaint']) {
+  if (opacity[key] === undefined) throw new Error(`packages/design/tokens.md: opacity.${key} missing`)
+}
+const { lineHeightRatio } = type
+
+// The starting-size rule, written once here for the table check and once in the
+// generated Swift below; the two must stay the same arithmetic. Nearest even number,
+// because A± steps by 2. JS Math.round and Swift's default .rounded() both round
+// halves up for positive numbers, so the two agree on ties.
+const startingSizeFor = (body) =>
+  Math.min(type.phoneMaxSize, Math.max(type.minSize, 2 * Math.round((body * type.startingSizeFactor) / 2)))
+
+// The table in tokens.md shows what the rule gives at each Text Size setting. The app
+// computes from the live Body size, not from this table, so the table is checked
+// here: a row that disagrees with the rule means someone edited one without the
+// other. Twelve rows, one per setting; a missing row is a gap in what was reviewed.
+const startingRows = [...section('Starting size').matchAll(/^\| ([^|]+?) \| (\d+) \| `(\d+)` \|$/gm)]
+if (startingRows.length !== 12) {
+  throw new Error(`packages/design/tokens.md: expected 12 starting-size rows (one per Text Size setting), found ${startingRows.length}`)
+}
+for (const [, label, body, size] of startingRows) {
+  const expected = startingSizeFor(Number(body))
+  if (Number(size) !== expected) {
+    throw new Error(`packages/design/tokens.md: starting size for ${label} is ${size}, but the rule gives ${expected} (${body} × ${type.startingSizeFactor})`)
+  }
+}
+const defaultRow = startingRows.find(([, label]) => label.startsWith('L '))
+if (!defaultRow || Number(defaultRow[3]) !== type.defaultSize) {
+  throw new Error(`packages/design/tokens.md: defaultSize (${type.defaultSize}) must equal the L (default) starting size`)
+}
+if (type.padStartingSize < type.minSize || type.padStartingSize > type.padMaxSize) {
+  throw new Error(`packages/design/tokens.md: padStartingSize ${type.padStartingSize} is outside ${type.minSize}–${type.padMaxSize}`)
+}
 
 const rgb = (hex) => {
   const n = parseInt(hex.replace('#', ''), 16)
@@ -84,6 +115,7 @@ enum DesignTokens {
 ${Object.entries(color).map(([k, v]) => swiftColor(k, v)).join('\n\n')}
 
   static let tonerOpacity: Double = ${opacity.toner}
+  static let tonerFaintOpacity: Double = ${opacity.tonerFaint}
 
   static let weightPrimary: Double = ${weight.weightPrimary}
   static let weightLatin: Double = ${weight.weightLatin}
@@ -92,16 +124,37 @@ ${Object.entries(color).map(([k, v]) => swiftColor(k, v)).join('\n\n')}
   static let ratioDefault: Double = ${type.ratioDefault}
 
   static let defaultSize: Double = ${type.defaultSize}
+  static let listSize: Double = ${type.listSize}
   static let minSize: Double = ${type.minSize}
-  static let maxSize: Double = ${type.maxSize}
+  static let phoneMaxSize: Double = ${type.phoneMaxSize}
+  static let padMaxSize: Double = ${type.padMaxSize}
+
+  /// The zoom maximum for the device this runs on: an iPad fits larger text.
+  @MainActor static var maxSize: Double {
+    UIDevice.current.userInterfaceIdiom == .pad ? padMaxSize : phoneMaxSize
+  }
 
   /// Total line box as a multiple of font size, so it holds when zoomed.
   /// Gurmukhi stacks vowel signs above and below the base line; at 1.0 the lagaa
   /// matraa collide with the line above.
   static let lineHeightRatio: Double = ${lineHeightRatio}
 
-  static func clamp(_ size: Double) -> Double {
+  @MainActor static func clamp(_ size: Double) -> Double {
     min(maxSize, max(minSize, size))
+  }
+
+  static let startingSizeFactor: Double = ${type.startingSizeFactor}
+  static let padStartingSize: Double = ${type.padStartingSize}
+
+  /// The reader's size on first launch
+  /// (docs/requirements/display-controls.md#starting-size): on a phone,
+  /// \`startingSizeFactor\` × the system Body text size, to the nearest even number,
+  /// within the zoom range; on iPad, a fixed size. Chosen once and saved, never
+  /// recomputed. Same arithmetic as \`startingSizeFor\` in generate-tokens.mjs, which
+  /// checks the table in tokens.md against it.
+  @MainActor static func startingSize(isPad: Bool, bodySize: Double) -> Double {
+    if isPad { return padStartingSize }
+    return clamp(2 * (bodySize * startingSizeFactor / 2).rounded())
   }
 
   /// SwiftUI's \`lineSpacing\` is *extra* space on top of the font's natural line
@@ -131,6 +184,7 @@ object DesignTokens {
 ${Object.entries(color).map(([k, v]) => kotlinColor(k, v)).join('\n\n')}
 
   const val TONER_OPACITY = ${opacity.toner}f
+  const val TONER_FAINT_OPACITY = ${opacity.tonerFaint}f
 
   const val WEIGHT_PRIMARY = ${weight.weightPrimary}f
   const val WEIGHT_LATIN = ${weight.weightLatin}f
@@ -139,8 +193,10 @@ ${Object.entries(color).map(([k, v]) => kotlinColor(k, v)).join('\n\n')}
   const val RATIO_DEFAULT = ${type.ratioDefault}f
 
   const val DEFAULT_SIZE = ${type.defaultSize}f
+  const val LIST_SIZE = ${type.listSize}f
   const val MIN_SIZE = ${type.minSize}f
-  const val MAX_SIZE = ${type.maxSize}f
+  /** Phone maximum; Android does not yet distinguish tablets. */
+  const val MAX_SIZE = ${type.phoneMaxSize}f
 
   /**
    * Total line box as a multiple of font size, so it holds when zoomed. Gurmukhi

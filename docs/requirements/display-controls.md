@@ -39,9 +39,31 @@ Font size of the reading area.
 a pinch made while it is not visible. The byline exists to teach the gesture; the
 slider is the fallback for someone who cannot make it.
 
-Sizing bounds live in `packages/design/tokens.md` (`type.minSize` 14, `type.maxSize` 56,
-`type.defaultSize` 20) and are generated into both platforms — they are not to be
-restated in platform code.
+Sizing bounds and starting sizes live in `packages/design/tokens.md` and are generated
+into the apps. They are not to be restated in platform code, or here.
+
+### Starting size
+
+**The reader's size on first launch comes from the device, chosen once.** It assumes
+someone has already set up their device the way they like to read, and starts the
+reader from there.
+
+- **On a phone, it follows the system Text Size setting.** It is a fixed multiple of
+  the size the system gives body text at that setting, rounded to the nearest even
+  number. The factor, and a table of what it gives at every setting, are in
+  [`tokens.md`](../../packages/design/tokens.md#starting-size). The default setting
+  starts at `defaultSize`, and larger settings start proportionally larger.
+- **On iPad, it is one fixed size, whatever the setting**, in both orientations.
+- **It is saved, then never recomputed.** Changing the system setting afterwards
+  does not move the reader. A size someone sets by pinch or A± always wins (see
+  [Persistence](#persistence)).
+
+Applies to iOS. Android has the equivalent setting (font scale) but does not yet
+save the size, and today scales every size by it rather than only the first. Both
+are to change to this rule.
+
+The web app's defaults are separate and not yet decided. The expectation is UI text
+around 14–18px and reader Gurbani around 23–30px. See [Open questions](#open-questions).
 
 ### Ratio
 
@@ -889,6 +911,13 @@ have nothing to do with what they are reading.
   line where the two differ — this is invisible to inspection and wrong everywhere.
 - **Defaults on first launch.** English and Panjabi Interpretation on, Word Gloss on,
   both Pronunciations off ⇒ an SGGS line renders four blocks under the Gurbani.
+- **Starting size is chosen once.** A fresh install on a phone at the default Text
+  Size ⇒ `defaultSize`; at any other setting ⇒ that setting's row in the
+  `tokens.md` table; on iPad ⇒ the iPad size whatever the setting. Change the system
+  Text Size and relaunch ⇒ the reader size is unchanged. Pinch, then relaunch ⇒ the
+  pinched size is kept. The table itself is checked by the token generator, which
+  fails if a row disagrees with the rule, a setting is missing, or the default row
+  differs from `defaultSize`.
 - **Copyable output matches the display.** Select a pauri in Saral and copy ⇒ the
   clipboard holds the same lines, with the same line breaks, and no injected
   characters. Repeat in Reader ⇒ flowed text with the paragraph break intact.
@@ -949,3 +978,8 @@ have nothing to do with what they are reading.
     states a starting value; the app currently uses 70% as a placeholder.
 16. **What colour is secondary Variorum text?** The app uses `foregroundMuted`;
     nothing specifies it.
+17. **What are the web app's default sizes?** Not covered by
+    [Starting size](#starting-size), because a browser does not report a device the
+    way a phone does. The current expectation is UI text around 14–18px and reader
+    Gurbani around 23–30px. Exact values, and whether they depend on screen width,
+    are open.

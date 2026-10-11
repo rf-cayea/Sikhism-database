@@ -67,9 +67,19 @@ is what lets a pause render the same in the apps as on the web.
 
 | Token | Value |
 | --- | --- |
-| toner | `0.04` |
+| toner | `0.12` |
+| tonerFaint | `0.04` |
 
-`--toner` in `global.css`: a neutral wash for dividers and inset surfaces.
+`toner` is a neutral wash: the page background blended this far toward the text
+colour. The apps use it for the tap and pinch highlight. `tonerFaint` is the same
+wash, lighter. The "Keep reading" card is a gradient from `tonerFaint` at its top to
+`toner` at its bottom; tapped, it fills with `toner` and fades back to the gradient,
+like a tapped line.
+
+It started as the web's `--toner` (`global.css`, 0.08), was halved to 0.04 on
+2026-09-19 because a tapped line read as a filled band, and was raised to 0.12 on
+2026-10-10 because at 0.04 the highlight was too faint to follow, especially in
+dark mode. **The web is still at 0.08**, so the two now differ.
 
 ## Weight
 
@@ -97,13 +107,64 @@ reads lighter than Gurmukhi does — different scripts, different apparent weigh
 `Ratio` control's starting point, within its 0.4–1.0 range
 ([display-controls.md](../docs/requirements/display-controls.md#ratio)).
 
-`lineHeight` is the total line box at `defaultSize`. **The generator emits the ratio,
-not the absolute**, so it still holds when the reader is zoomed.
+`lineHeightRatio` is the total line box as a multiple of the font size. It is stored
+as a ratio, not an absolute, so it holds at every zoom. 1.6 matches the web app's
+`line-height: 1.6`. Sant Lipi's own line box is 1.662 × its size, and iOS can only
+add space on top of a font's line box, never remove it, so iOS renders 1.662 and is
+slightly taller than Android. That difference is accepted.
+
+`defaultSize` is the reader's Gurmukhi size on a phone at the system's default text
+size: the L row of [Starting size](#starting-size), which the generator checks.
+`listSize` is the bani list's Gurmukhi size. It is separate so that changing the
+reader default does not resize the list.
+
+**The zoom range is per device** (2026-10-10). `minSize` applies everywhere.
+`phoneMaxSize` is the iPhone's maximum and `padMaxSize` the iPad's: an iPad's wider
+screen fits larger text before lines shrink to a word or two. The apps pick the
+maximum for the device they run on. Android does not yet tell phones from tablets,
+so it uses `phoneMaxSize`.
 
 | Token | Value |
 | --- | --- |
 | ratioDefault | `0.6` |
-| defaultSize | `20` |
-| lineHeight | `24` |
-| minSize | `14` |
-| maxSize | `56` |
+| defaultSize | `28` |
+| listSize | `20` |
+| lineHeightRatio | `1.6` |
+| minSize | `16` |
+| phoneMaxSize | `88` |
+| padMaxSize | `132` |
+| startingSizeFactor | `1.65` |
+| padStartingSize | `40` |
+
+## Starting size
+
+The reader's size the first time the app opens
+([display-controls.md](../docs/requirements/display-controls.md#starting-size)).
+
+**On a phone: `startingSizeFactor` × the system's Body text size, rounded to the
+nearest even number, kept within `minSize`–`phoneMaxSize`.** Even, because A± moves in
+steps of 2, so the starting size sits on the same grid as every tap after it. The
+app reads the Body size from iOS at first launch rather than from this table, so a
+change Apple makes to its sizes flows through without an edit. **On iPad:
+`padStartingSize`, whatever the setting.** Generated for iOS only for now. Android
+does not read these yet.
+
+The table shows what the rule gives. *iOS body text* was measured on an iPhone
+(2026-10-10) with `UIFont.preferredFont(forTextStyle: .body, compatibleWith:)`.
+*Size* is derived from it, and the generator fails if any row disagrees with the
+rule, so edit the factor and then the table, not the table alone.
+
+| Setting | iOS body text | Size |
+| --- | --- | --- |
+| xS | 14 | `24` |
+| S | 15 | `24` |
+| M | 16 | `26` |
+| L (default) | 17 | `28` |
+| XL | 19 | `32` |
+| XXL | 21 | `34` |
+| XXXL | 23 | `38` |
+| AX1 | 28 | `46` |
+| AX2 | 33 | `54` |
+| AX3 | 40 | `66` |
+| AX4 | 47 | `78` |
+| AX5 | 53 | `88` |

@@ -35,8 +35,8 @@ fun BaniList(banis: List<Bani>, gurmukhi: FontFamily, onOpen: (Bani) -> Unit) {
           Text(
             text = bani.gurmukhi,
             fontFamily = gurmukhi,
-            fontSize = DesignTokens.DEFAULT_SIZE.sp,
-            lineHeight = (DesignTokens.DEFAULT_SIZE * DesignTokens.LINE_HEIGHT_RATIO).sp,
+            fontSize = DesignTokens.LIST_SIZE.sp,
+            lineHeight = (DesignTokens.LIST_SIZE * DesignTokens.LINE_HEIGHT_RATIO).sp,
           )
           Text(bani.latin, style = MaterialTheme.typography.bodyMedium)
         }

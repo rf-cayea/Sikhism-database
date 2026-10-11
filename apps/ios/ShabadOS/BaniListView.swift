@@ -6,7 +6,7 @@ struct BaniListView: View {
       NavigationLink(value: bani.id) {
         VStack(alignment: .leading, spacing: 4) {
           Text(bani.gurmukhi)
-            .font(.custom(Fonts.gurmukhi, size: DesignTokens.defaultSize))
+            .font(.custom(Fonts.gurmukhi, size: DesignTokens.listSize))
             .foregroundStyle(DesignTokens.foreground)
           Text(bani.latin)
             .font(.subheadline)

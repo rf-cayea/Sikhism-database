@@ -39,7 +39,8 @@ object DesignTokens {
   val vishraamLightLight = Color(0xFF5E438E)
   val vishraamLightDark = Color(0xFFDECBFF)
 
-  const val TONER_OPACITY = 0.04f
+  const val TONER_OPACITY = 0.12f
+  const val TONER_FAINT_OPACITY = 0.04f
 
   const val WEIGHT_PRIMARY = 550f
   const val WEIGHT_LATIN = 475f
@@ -47,16 +48,18 @@ object DesignTokens {
 
   const val RATIO_DEFAULT = 0.6f
 
-  const val DEFAULT_SIZE = 20f
-  const val MIN_SIZE = 14f
-  const val MAX_SIZE = 56f
+  const val DEFAULT_SIZE = 28f
+  const val LIST_SIZE = 20f
+  const val MIN_SIZE = 16f
+  /** Phone maximum; Android does not yet distinguish tablets. */
+  const val MAX_SIZE = 88f
 
   /**
    * Total line box as a multiple of font size, so it holds when zoomed. Gurmukhi
    * stacks vowel signs above and below the base line; at 1.0 the lagaa matraa
    * collide with the line above.
    */
-  const val LINE_HEIGHT_RATIO = 1.2f
+  const val LINE_HEIGHT_RATIO = 1.6f
 
   fun clamp(size: Float) = size.coerceIn(MIN_SIZE, MAX_SIZE)
 }

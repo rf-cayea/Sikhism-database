@@ -12,6 +12,38 @@ struct ShabadOSApp: App {
       NavigationStack {
         BaniListView()
       }
+      .modifier(StartingSize())
+    }
+  }
+}
+
+/// Saves the reader's starting size the first time the app opens, from the
+/// device and the system Text Size setting
+/// (docs/requirements/display-controls.md#starting-size).
+///
+/// Written once and never recomputed. Someone who later changes their Text Size
+/// keeps the reader size they have, and a size they set by pinch or A± is never
+/// overwritten. Attached at the root so it runs before the reader can open; the
+/// reader itself only ever reads the saved value.
+private struct StartingSize: ViewModifier {
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+  func body(content: Content) -> some View {
+    content.onAppear {
+      let defaults = UserDefaults.standard
+      guard defaults.object(forKey: BaniReaderView.fontSizeKey) == nil else { return }
+      // The Body size iOS uses at this person's Text Size setting, asked for
+      // explicitly by setting rather than through UITraitCollection.current, which
+      // is not guaranteed to be populated inside onAppear.
+      let traits = UITraitCollection(preferredContentSizeCategory: UIContentSizeCategory(dynamicTypeSize))
+      let body = UIFont.preferredFont(forTextStyle: .body, compatibleWith: traits).pointSize
+      defaults.set(
+        DesignTokens.startingSize(
+          isPad: UIDevice.current.userInterfaceIdiom == .pad,
+          bodySize: body
+        ),
+        forKey: BaniReaderView.fontSizeKey
+      )
     }
   }
 }

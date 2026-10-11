@@ -140,8 +140,12 @@ for now.
 [reading-shell.md](../../docs/requirements/reading-shell.md) is not yet read against
 this view), pause colouring (on by default), both pronunciation schemes as toggles
 (off by default, per the Variorum defaults), the Ratio control, and font sizing by
-toolbar buttons or a two-finger pinch that holds the line under your fingers in
-place. Font size persists across launches (`@AppStorage`); pause and pronunciation
+toolbar buttons (2pt a tap) or a two-finger pinch. The starting size is chosen once,
+on first launch, from the device and its Text Size setting
+([display-controls.md](../../docs/requirements/display-controls.md#starting-size)),
+and the zoom range is per device (16–88 iPhone, 16–132 iPad; both in
+`packages/design/tokens.md`). Font size persists across launches (`@AppStorage`);
+pause and pronunciation
 toggles live in a menu stand-in for the Controls sidebar
 ([reading-shell.md](../../docs/requirements/reading-shell.md#the-controls-sidebar)),
 which does not exist yet and should be deleted once that surface lands.
@@ -182,14 +186,27 @@ schemes, toolbar A−/A+ sizing.
 (72), signed with the team's development certificate. No problems found. This is the
 first device run; everything before it was Simulator only.
 
-**Pinch-to-zoom verified on device (2026-10-10):** the line under your fingers stays
-put, within the one-line-height limit below.
+**Pinch-to-zoom, reworked and verified on iPhone and iPad (2026-10-10).** The font
+size changes live, in 1/6pt steps, at sensitivity 0.75 (the text grows about 1.68×
+when the fingers spread to twice their distance). The row under the fingers is
+highlighted, and is put back where it was **once, when the fingers lift**. A pinch
+that starts between rows anchors to the one nearer the middle of the screen.
 
-**Known limitation:** focal zoom is accurate to within **one line height**, because
-`scrollTo(_:anchor:)` aligns a row's own anchor with the viewport's and cannot
-express "40% into this row at 25% down the screen". Exact positioning needs iOS 18's
-`ScrollPosition` with offsets — available at this app's deployment target (26.0,
-[interaction.md](../../docs/interaction.md#platform-targets)) but not yet used.
+**Do not correct the scroll position during the pinch.** It used to be corrected on
+every step, and at large sizes the reader jittered badly: each step re-wrapped lines
+and the lazy list re-estimated the heights of rows off screen, so every correction
+was computed from guesses and the position bounced. Removing the per-step
+correction removed the jitter entirely. Previewing by drawing the reader scaled
+(`scaleEffect`) and applying the size on release was also tried: no jitter, but the
+size change was too hard to judge while pinching. The reasoning is also in the doc
+comment on `pinchToZoom`.
+
+**Known limitation:** the row's return on release is accurate to within **one line
+height**, because `scrollTo(_:anchor:)` aligns a row's own anchor with the viewport's
+and cannot express "40% into this row at 25% down the screen". Exact positioning
+needs iOS 18's `ScrollPosition` with offsets — available at this app's deployment
+target (26.0, [interaction.md](../../docs/interaction.md#platform-targets)) but not
+yet used.
 
 **Known inconsistency to resolve:** this app persists reader font size
 (`@AppStorage`); Android does not (in-memory only). Neither is obviously wrong but

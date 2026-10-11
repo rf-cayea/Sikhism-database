@@ -30,12 +30,17 @@ extension DesignTokens {
   /// translucent, so it can double as a fade/overlay target wherever one is
   /// needed (`ContinuationBlock.preview`'s own use of it, previously this
   /// file's own separate `cardColor`, now just this).
-  static var toner: Color {
+  static var toner: Color { wash(DesignTokens.tonerOpacity) }
+
+  /// The same wash, lighter: the top of the "Keep reading" card's gradient.
+  static var tonerFaint: Color { wash(DesignTokens.tonerFaintOpacity) }
+
+  private static func wash(_ fraction: Double) -> Color {
     Color(UIColor { traits in
       UIColor(DesignTokens.background).resolvedColor(with: traits)
         .blended(
           with: UIColor(DesignTokens.foreground).resolvedColor(with: traits),
-          fraction: DesignTokens.tonerOpacity
+          fraction: fraction
         )
     })
   }
@@ -64,11 +69,12 @@ private extension View {
   /// card looks like in this reader, not two that could drift — pass
   /// `.clear` for "no card right now" rather than reaching for a different
   /// modifier, so a row's background never silently stops matching its
-  /// on-state's shape.
-  func readerCardBackground(_ color: Color) -> some View {
+  /// on-state's shape. `fill` is any shape style, so the "Keep reading" card can
+  /// pass its own layered fill.
+  func readerCardBackground<Fill: ShapeStyle>(_ fill: Fill) -> some View {
     background(
       RoundedRectangle(cornerRadius: ReaderCard.cornerRadius)
-        .fill(color)
+        .fill(fill)
         .padding(.horizontal, -ReaderCard.bleed)
         .padding(.vertical, -ReaderCard.bleed)
     )
@@ -137,7 +143,11 @@ struct BaniReaderView: View {
   // same coordinate space `rowFrames` and the tap gesture below both read.
   fileprivate static let space = "reader"
 
-  @AppStorage("fontSize") private var fontSize = DesignTokens.defaultSize
+  /// Also written once on first launch by `StartingSize`, which is why the key is
+  /// shared rather than repeated as a literal.
+  static let fontSizeKey = "fontSize"
+
+  @AppStorage(fontSizeKey) private var fontSize = DesignTokens.defaultSize
 
   /// Vishraam colouring. On by default
   /// (docs/requirements/display-controls.md#pauses).
@@ -173,6 +183,12 @@ struct BaniReaderView: View {
   @State private var focalID: String?
   @State private var focalFraction: CGFloat = 0.5
 
+  /// The size the reader draws at. Kept within the zoom range here rather than
+  /// only when the size changes, so a saved size from a wider range (an older
+  /// version, or the other device's maximum) is drawn within this one's limits.
+  /// The saved value itself is not rewritten.
+  private var displaySize: Double { livePinchSize ?? DesignTokens.clamp(fontSize) }
+
   /// Which "Keep reading" controls are expanded, by `Continuation.id`. Not
   /// persisted — collapsed is the state library.md's controls are read against on
   /// every fresh open (docs/requirements/library.md#continuation-not-configuration).
@@ -193,8 +209,6 @@ struct BaniReaderView: View {
   /// highlight is disappearing before the scroll settles, or the reverse.
   private static let tapHighlightHoldDuration: Double = 0.5
   private static let tapHighlightFadeOutDuration: Double = 0.25
-
-  private var displaySize: Double { livePinchSize ?? fontSize }
 
   var body: some View {
     GeometryReader { viewport in
@@ -342,6 +356,7 @@ struct BaniReaderView: View {
         pauses: pauses,
         schemes: schemes,
         ratio: ratio,
+        highlighted: highlightedLineID == item.id,
         toggle: { expandedContinuations.insert(continuation.id) }
       )
     }
@@ -466,37 +481,100 @@ struct BaniReaderView: View {
     }
   }
 
+  /// How strongly the size follows the fingers. The size changes by the pinch's
+  /// magnification raised to this power: at 0.75, spreading the fingers to twice
+  /// their distance enlarges the text about 1.68×, not 2×. Below 1 is slower and
+  /// finer than the fingers; above 1, faster. Chosen 2026-10-10 by trying values
+  /// from 0.25 to 1.5 on an iPhone and an iPad.
+  private static let pinchSensitivity: Double = 0.75
+
+  /// The row a pinch starting at height `y` is anchored to.
+  ///
+  /// The row under the fingers if there is one. **A pinch that starts in the gap
+  /// between two rows still picks one: the one nearer the middle of the screen**,
+  /// not the one nearer the top or bottom edge. So a gap in the top half takes
+  /// the row below it, and a gap in the bottom half the row above it. Only rows
+  /// count. The "Keep reading" Expand buttons report their frames into the same
+  /// dictionary under `expand:` keys, and are never an anchor.
+  private static func pinchAnchor(
+    at y: CGFloat, in frames: [String: CGRect], viewportHeight: CGFloat
+  ) -> String? {
+    let rows = frames.filter { !$0.key.hasPrefix("expand:") }
+    if let under = rows.first(where: { $0.value.minY <= y && y <= $0.value.maxY }) {
+      return under.key
+    }
+    let above = rows.filter { $0.value.maxY < y }.max { $0.value.maxY < $1.value.maxY }
+    let below = rows.filter { $0.value.minY > y }.min { $0.value.minY < $1.value.minY }
+    let inTopHalf = y < viewportHeight / 2
+    return (inTopHalf ? below ?? above : above ?? below)?.key
+  }
+
+  /// The font size changes live, and the reading position is corrected once, at
+  /// the end.
+  ///
+  /// **The size itself changes during the pinch**, so the effect is unambiguous.
+  /// Previewing by drawing the reader scaled (`scaleEffect`) and applying the size
+  /// on release was tried 2026-10-10: no jitter, but what the size would become was
+  /// too hard to judge while pinching.
+  ///
+  /// **The scroll position is not corrected during the pinch.** It used to be:
+  /// every step called `scrollTo` to hold the row under the fingers in place. At
+  /// large sizes that came with lines re-wrapping and `LazyVStack` re-estimating
+  /// rows off screen, and the reader visibly jittered (seen 2026-10-10). Correcting
+  /// once, when the fingers lift, is on trial as the fix. If the jitter remains
+  /// without the per-step correction, its cause is the re-layout itself, not the
+  /// correction.
   private func pinchToZoom(proxy: ScrollViewProxy) -> some Gesture {
     MagnifyGesture()
       .onChanged { value in
         if pinchBaseline == nil {
-          pinchBaseline = fontSize
+          pinchBaseline = DesignTokens.clamp(fontSize)
           // Where the fingers went down, and which row was there. Both are in the
           // reader's coordinate space, so they are directly comparable.
           let y = value.startLocation.y
           focalFraction = min(1, max(0, y / max(viewportHeight, 1)))
-          focalID = rowFrames.first { $0.value.minY <= y && y <= $0.value.maxY }?.key
+          focalID = Self.pinchAnchor(at: y, in: rowFrames, viewportHeight: viewportHeight)
+          // Shows which row the pinch is anchored to, with the same wash a tap
+          // uses, so its drift during the pinch and its return on release can be
+          // followed.
+          highlightedLineID = focalID
         }
 
-        // Rounded to whole points: text layout rounds font size and line height to
-        // device pixels independently, so fractional sizes make the two drift and
-        // the lines visibly jitter.
-        let next = DesignTokens.clamp(((pinchBaseline ?? fontSize) * value.magnification).rounded())
+        // Snapped to steps of 1/6pt (chosen 2026-10-10, for smoothness). It was
+        // whole points before, because text layout rounds font size and line
+        // height to device pixels independently, so off-pixel sizes can make the
+        // two drift. If that shows as shimmer once the larger jitter is gone, go
+        // back to `.rounded()` on the whole size.
+        let step = 1.0 / 6
+        let raw = (pinchBaseline ?? fontSize) * pow(Double(value.magnification), Self.pinchSensitivity)
+        let next = DesignTokens.clamp((raw / step).rounded() * step)
         guard next != livePinchSize else { return }
         livePinchSize = next
-
-        // Put the focal row back where it started. scrollTo aligns the row's own
-        // anchor with the same fraction of the viewport, so the error is bounded by
-        // one line height rather than by the length of the bani.
-        if let id = focalID {
-          proxy.scrollTo(id, anchor: UnitPoint(x: 0.5, y: focalFraction))
-        }
       }
       .onEnded { _ in
         if let final = livePinchSize { fontSize = final }
         livePinchSize = nil
         pinchBaseline = nil
+
+        // After the final size has laid out (hence the deferral), put the row
+        // that was under the fingers back at the same fraction of the screen.
+        // scrollTo aligns the row's own anchor with that fraction, so this is
+        // accurate to within one line height.
+        let id = focalID
         focalID = nil
+        if let id {
+          DispatchQueue.main.async {
+            proxy.scrollTo(id, anchor: UnitPoint(x: 0.5, y: focalFraction))
+          }
+          // Then fade the anchor highlight exactly as a tap's fades, unless
+          // something else (a tap) has taken the highlight over meanwhile.
+          DispatchQueue.main.asyncAfter(deadline: .now() + Self.tapHighlightHoldDuration) {
+            guard highlightedLineID == id else { return }
+            withAnimation(.easeOut(duration: Self.tapHighlightFadeOutDuration)) {
+              highlightedLineID = nil
+            }
+          }
+        }
       }
   }
 }
@@ -809,6 +887,9 @@ private struct ContinuationBlock: View {
   let pauses: Bool
   let schemes: [Pronunciation]
   let ratio: Double
+  /// Whether this card is the tapped row, so it can show the highlight itself
+  /// (see the end of `body`).
+  let highlighted: Bool
   let toggle: () -> Void
 
   /// Enough source lines to fill the preview even for short ones; the frame
@@ -820,9 +901,9 @@ private struct ContinuationBlock: View {
   /// `DesignTokens.toner` — solid, not a translucent wash, on purpose:
   /// `preview`'s fade overlay needs one concrete colour to paint toward, and
   /// a translucent fill can't serve as that target without a second blend of
-  /// its own — using the same colour for both the card's fill and the
-  /// overlay's endpoint is what makes the fade disappear seamlessly into the
-  /// card rather than leaving a visible seam. Now shared with
+  /// its own. The card's fill is a gradient that *ends* in this colour, and
+  /// the overlay ends in it too, so the fade meets the card's bottom without a
+  /// visible seam. Now shared with
   /// `BaniReaderView`'s own tap-highlight, so there is exactly one "toner
   /// wash" definition in this file, not two that could drift.
   private static var cardColor: Color { DesignTokens.toner }
@@ -886,7 +967,23 @@ private struct ContinuationBlock: View {
       // bleed eats into part of that existing 12pt gap instead of adding
       // to it, the same as it already does horizontally into the reader's
       // side gutter.
-      .readerCardBackground(Self.cardColor)
+      //
+      // **Tapped, the whole card fills with `toner`, then fades back.** This
+      // layer sits above the gradient below; the row's own highlight cannot do
+      // it, because it is drawn behind the card and the card's opaque fill
+      // hides it. Driven by the same `highlightedLineID` as a tapped line, so
+      // the fade back uses that line highlight's own animation and timing.
+      .readerCardBackground(Self.cardColor.opacity(highlighted ? 1 : 0))
+      // **At rest, a gradient from `tonerFaint` at the top to `toner` at the
+      // bottom** (2026-10-10). Both ends are solid colours, so the gradient
+      // blends cleanly, and its bottom matches the end of the preview's fade.
+      .readerCardBackground(
+        LinearGradient(
+          colors: [DesignTokens.tonerFaint, Self.cardColor],
+          startPoint: .top,
+          endPoint: .bottom
+        )
+      )
   }
 
   /// The faded, non-interactive preview of the words behind the button. Plain
@@ -913,8 +1010,11 @@ private struct ContinuationBlock: View {
     // interaction: it just progressively covers the text with `Self.cardColor`,
     // which is why that colour has to be solid, not a wash — see its own
     // comment. A straight two-stop ramp, top to bottom of the box: 0% covering
-    // at the very top, 100% — exactly `Self.cardColor`, matching the card
-    // behind it — at the very bottom, where `.clipped()` also cuts.
+    // at the very top, 100% `Self.cardColor` at the very bottom, where
+    // `.clipped()` also cuts. The card behind is itself a gradient ending in
+    // that colour, but it extends `ReaderCard.bleed` past this box, so at this
+    // box's bottom it is a shade lighter than the veil, a difference of well
+    // under 1% of the text colour.
     .overlay(
       LinearGradient(
         colors: [.clear, Self.cardColor],

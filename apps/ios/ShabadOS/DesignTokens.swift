@@ -64,7 +64,8 @@ enum DesignTokens {
       : UIColor(red: 0.3686, green: 0.2627, blue: 0.5569, alpha: 1)
   })
 
-  static let tonerOpacity: Double = 0.04
+  static let tonerOpacity: Double = 0.12
+  static let tonerFaintOpacity: Double = 0.04
 
   static let weightPrimary: Double = 550
   static let weightLatin: Double = 475
@@ -72,17 +73,38 @@ enum DesignTokens {
 
   static let ratioDefault: Double = 0.6
 
-  static let defaultSize: Double = 20
-  static let minSize: Double = 14
-  static let maxSize: Double = 56
+  static let defaultSize: Double = 28
+  static let listSize: Double = 20
+  static let minSize: Double = 16
+  static let phoneMaxSize: Double = 88
+  static let padMaxSize: Double = 132
+
+  /// The zoom maximum for the device this runs on: an iPad fits larger text.
+  @MainActor static var maxSize: Double {
+    UIDevice.current.userInterfaceIdiom == .pad ? padMaxSize : phoneMaxSize
+  }
 
   /// Total line box as a multiple of font size, so it holds when zoomed.
   /// Gurmukhi stacks vowel signs above and below the base line; at 1.0 the lagaa
   /// matraa collide with the line above.
-  static let lineHeightRatio: Double = 1.2
+  static let lineHeightRatio: Double = 1.6
 
-  static func clamp(_ size: Double) -> Double {
+  @MainActor static func clamp(_ size: Double) -> Double {
     min(maxSize, max(minSize, size))
+  }
+
+  static let startingSizeFactor: Double = 1.65
+  static let padStartingSize: Double = 40
+
+  /// The reader's size on first launch
+  /// (docs/requirements/display-controls.md#starting-size): on a phone,
+  /// `startingSizeFactor` × the system Body text size, to the nearest even number,
+  /// within the zoom range; on iPad, a fixed size. Chosen once and saved, never
+  /// recomputed. Same arithmetic as `startingSizeFor` in generate-tokens.mjs, which
+  /// checks the table in tokens.md against it.
+  @MainActor static func startingSize(isPad: Bool, bodySize: Double) -> Double {
+    if isPad { return padStartingSize }
+    return clamp(2 * (bodySize * startingSizeFactor / 2).rounded())
   }
 
   /// SwiftUI's `lineSpacing` is *extra* space on top of the font's natural line

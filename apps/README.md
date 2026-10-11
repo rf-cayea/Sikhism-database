@@ -173,9 +173,12 @@ rendering, light/dark, A−/A+ sizing.
 and verified** — see [above](#packagesgurmukhi-in-the-apps). In active use for pause
 colouring and both pronunciation schemes.
 
-**Unverified — written but never run:** focal-point pinch-to-zoom on both platforms
-(the most recent work). Watch for: whether the point under your fingers stays put,
-and on Android whether the anchor row lands where expected or jumps to the top.
+**Pinch-to-zoom differs between the platforms.** iOS was reworked and verified on
+device on 2026-10-10: live size changes, sensitivity 0.75, and the anchor row put
+back once on release rather than on every step, which is what removed a severe
+jitter at large sizes ([ios/README.md](ios/README.md#state-of-play)). **Android
+still corrects the scroll on every step and is unverified**, so it likely has the
+same jitter; port the iOS approach when Android is next worked on.
 
 Known inconsistency to resolve: **iOS persists reader font size** (`@AppStorage`)
 and **Android does not** (in-memory). Neither is obviously wrong but they should
