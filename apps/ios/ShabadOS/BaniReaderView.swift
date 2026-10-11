@@ -81,14 +81,19 @@ private extension View {
   }
 }
 
-/// Collects each visible row's frame in the reader's coordinate space, so a pinch
-/// can work out which line is under the fingers.
-private struct RowFrames: PreferenceKey {
-  static let defaultValue: [String: CGRect] = [:]
-
-  static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
-    value.merge(nextValue()) { _, new in new }
-  }
+/// Each loaded row's frame in the reader's coordinate space, so a pinch can work
+/// out which line is under the fingers, and a tap on a continuation card can tell
+/// its Expand button (keyed `expand:<id>`) from the rest of the card.
+///
+/// **A plain class, deliberately not observed.** The frames are only *read*, when a
+/// pinch or tap begins, so a change to them must not re-render the reader. They used
+/// to travel as a `PreferenceKey` into `@State`: every layout change then re-rendered
+/// the reader, which reported frames again, and SwiftUI logged "Bound preference
+/// RowFrames tried to update multiple times per frame" (2026-10-11). Writing to an
+/// object SwiftUI does not observe cannot schedule a render, so there is no loop.
+/// Do not make this `@Observable`.
+private final class RowFrames {
+  var frames: [String: CGRect] = [:]
 }
 
 /// Turns off `UIScrollView.scrollsToTop` — the system behaviour where tapping
@@ -177,7 +182,8 @@ struct BaniReaderView: View {
   /// value would compound and run away.
   @State private var pinchBaseline: Double?
 
-  @State private var rowFrames: [String: CGRect] = [:]
+  /// `@State` only to keep one instance for the view's lifetime; see `RowFrames`.
+  @State private var rowFrames = RowFrames()
   @State private var viewportHeight: CGFloat = 1
   /// The row under the fingers, and where on screen it sat when the pinch started.
   @State private var focalID: String?
@@ -234,14 +240,12 @@ struct BaniReaderView: View {
                 // "on the card" from "on the Expand button" apart (the
                 // button reports its own frame into this same dictionary,
                 // under a distinct key — see `ContinuationBlock`).
-                .background(
-                  GeometryReader { geo in
-                    Color.clear.preference(
-                      key: RowFrames.self,
-                      value: [item.id: geo.frame(in: .named(Self.space))]
-                    )
-                  }
-                )
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: {
+                  rowFrames.frames[item.id] = $0
+                }
+                // A row the lazy stack unloads stops reporting, and its last frame
+                // would otherwise stay behind to be matched by a later pinch.
+                .onDisappear { rowFrames.frames[item.id] = nil }
                 .readerCardBackground(highlightedLineID == item.id ? DesignTokens.toner : .clear)
                 // Makes the WHOLE row tappable, not just the glyphs.
                 // `LineText`'s own `.frame(maxWidth: .infinity)` stretches
@@ -270,7 +274,7 @@ struct BaniReaderView: View {
                 //
                 // `SpatialTapGesture`, not plain `TapGesture` — a
                 // `.continuation` row needs the tap's *location* to exclude
-                // the Expand button's own area (`rowFrames["expand:…"]`,
+                // the Expand button's own area (`rowFrames.frames["expand:…"]`,
                 // reported by `ContinuationBlock`). **Not solved by attaching
                 // a second, exclusive gesture directly to the button's own
                 // area instead** — that was tried twice (a `ZStack` sibling,
@@ -289,7 +293,7 @@ struct BaniReaderView: View {
                     case .line:
                       tapLine(item, proxy: proxy, scroll: scroll)
                     case .continuation(let continuation):
-                      if let buttonFrame = rowFrames["expand:\(continuation.id)"],
+                      if let buttonFrame = rowFrames.frames["expand:\(continuation.id)"],
                         buttonFrame.contains(value.location)
                       {
                         return
@@ -308,7 +312,6 @@ struct BaniReaderView: View {
           .background(ScrollsToTopDisabler())
         }
         .coordinateSpace(name: Self.space)
-        .onPreferenceChange(RowFrames.self) { rowFrames = $0 }
         // simultaneousGesture, not gesture: a ScrollView installs its own
         // recognisers and an exclusive .gesture loses to them.
         .simultaneousGesture(pinchToZoom(proxy: proxy))
@@ -357,6 +360,7 @@ struct BaniReaderView: View {
         schemes: schemes,
         ratio: ratio,
         highlighted: highlightedLineID == item.id,
+        frames: rowFrames,
         toggle: { expandedContinuations.insert(continuation.id) }
       )
     }
@@ -533,7 +537,7 @@ struct BaniReaderView: View {
           // reader's coordinate space, so they are directly comparable.
           let y = value.startLocation.y
           focalFraction = min(1, max(0, y / max(viewportHeight, 1)))
-          focalID = Self.pinchAnchor(at: y, in: rowFrames, viewportHeight: viewportHeight)
+          focalID = Self.pinchAnchor(at: y, in: rowFrames.frames, viewportHeight: viewportHeight)
           // Shows which row the pinch is anchored to, with the same wash a tap
           // uses, so its drift during the pinch and its return on release can be
           // followed.
@@ -890,6 +894,8 @@ private struct ContinuationBlock: View {
   /// Whether this card is the tapped row, so it can show the highlight itself
   /// (see the end of `body`).
   let highlighted: Bool
+  /// Where this card reports its Expand button's frame; see `RowFrames`.
+  let frames: RowFrames
   let toggle: () -> Void
 
   /// Enough source lines to fill the preview even for short ones; the frame
@@ -949,14 +955,10 @@ private struct ContinuationBlock: View {
         // (`ZStack`, then this `.overlay`) did not reliably work, so the
         // row-level gesture instead checks the tap's location directly
         // against this frame.
-        .background(
-          GeometryReader { geo in
-            Color.clear.preference(
-              key: RowFrames.self,
-              value: ["expand:\(continuation.id)": geo.frame(in: .named(BaniReaderView.space))]
-            )
-          }
-        )
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(BaniReaderView.space)) } action: {
+          frames.frames["expand:\(continuation.id)"] = $0
+        }
+        .onDisappear { frames.frames["expand:\(continuation.id)"] = nil }
       }
       // `readerCardBackground` bleeds outward via negative padding on the
       // shape alone, not on this content — the text stays exactly where
