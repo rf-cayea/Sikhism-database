@@ -40,17 +40,74 @@ Where the bundle id came from, why changing it forfeits the listing, the
 Sentry/PostHog reduction, and telemetry's ADR status are the same on both platforms
 — see [`apps/README.md#store-identity`](../README.md#store-identity).
 
-## Before submitting — still outstanding
+App Store Connect app id `1510358282`. It had never been released to the App
+Store before this app: the legacy Expo app reached TestFlight only (versions
+0.1.0–0.2.0, builds up to 71, all expired), so replacing it stranded no users. The
+legacy beta-channel listing, *Shabad OS (Next)* (`6497795055`,
+`com.shabados.next.app`), was likewise never released and is unused.
 
-Same two items as [`apps/README.md`](../README.md#store-identity) on both
-platforms. The iOS mechanics:
+## Versions
 
-1. **Set the team and signing** in Xcode (Signing & Capabilities). The build script
-   passes `CODE_SIGNING_ALLOWED=NO` and targets the simulator, so it does not need
-   signing; archiving for the store does.
-2. **Bump `MARKETING_VERSION`** past whatever the existing listing shows — it is
-   `0.1.0` here, which is almost certainly lower than the published version and
-   will be rejected on upload.
+`MARKETING_VERSION` is what users see; `CURRENT_PROJECT_VERSION` (the build number)
+is a counter App Store Connect uses to tell uploads apart. Both are in
+`project.pbxproj`, which cannot hold a comment Xcode will keep, so the reasoning is
+here:
+
+- **Started at `0.3.0` (72).** The legacy app's TestFlight builds reached `0.2.0`
+  build 71. App Store Connect rejects a version that is not higher than one it has
+  approved, and a build number already used under the same version. Continuing from
+  there avoids both, and `0.3.0` is also Android's first production version.
+- **Every upload needs a higher build number**; every App Store release a higher
+  version. Bump them in Xcode (target → General → Identity) or in both build
+  configurations of `project.pbxproj`.
+- The version in App Store Connect's *Prepare for Submission* entry must equal
+  `MARKETING_VERSION`, or the uploaded build cannot be selected for it.
+
+## Signing
+
+Signing is Xcode's **automatic signing with a cloud-managed distribution
+certificate**. The certificate that proves a build came from this team stays with
+Apple, and Xcode signs with it on behalf of whoever is signed in. There is no key
+file or password to keep, unlike Android's upload keystore. Being able to release
+comes down to holding the right role in the team.
+
+| | |
+| --- | --- |
+| Team ID | `VN2W54FQE6`, set in `project.pbxproj`. Not a secret: it is in every signed build |
+| Team name | "Shabad OS Team" in App Store Connect; Xcode lists it by its entity name, "Bhajneet Kohli" |
+| Enrolled as | Organization |
+| Membership renews | 2027-03-08 — if it lapses, the app is removed from sale |
+
+**Custody.** Uploading with a cloud-managed certificate needs the **Admin** (or
+Account Holder) role. @bhajneet and @harjot1singh hold Admin. To release, ask one of
+them for access, or for the Admin role. The **Account Holder** is the Apple Account
+team@shabados.com, held by @bhajneet and @harjot1singh. It is the only account that
+can renew the membership and accept Apple's updated agreements. Until a new
+agreement is accepted, Certificates, Identifiers & Profiles is locked for everyone
+(last accepted 2026-10-10). Sign in to Xcode with a personal Admin account, not this
+one. That keeps the team's most powerful account off build machines, and the
+procedure is then the same for every Admin.
+
+## Releasing
+
+1. **Rebuild `packages/gurmukhi`** from a real terminal:
+   `cd packages/gurmukhi && mise run apple`. `apps/build.sh` only builds it when the
+   xcframework is missing, not when it is out of date. A stale one fails to compile
+   once the app calls a function added since, or silently ships old behaviour.
+2. **Bump the version and build number** (see [Versions](#versions)).
+3. In Xcode, sign in under Settings → Apple Accounts with an Admin's Apple Account.
+   Then choose *Any iOS Device* as the destination, and Product → Archive.
+4. In the Organizer that opens: Distribute App → App Store Connect → Upload.
+5. In App Store Connect, open the version in *Prepare for Submission*, select the
+   build once processing finishes, and Add for Review.
+
+`ITSAppUsesNonExemptEncryption = NO` is set, so uploads skip the export-compliance
+question. That is true while the app makes no network connections. Revisit it when
+anything networked lands.
+
+`ShabadOS/PrivacyInfo.xcprivacy` declares the one "required reason" API the app uses
+(UserDefaults, via `@AppStorage`) and no collected data. Keep it in step with the
+App Privacy answers in App Store Connect (**Data Not Collected**).
 
 ## `packages/gurmukhi` in this app
 
@@ -59,6 +116,13 @@ through it, not a local reimplementation. See `Bani.swift` (`detect`/`remove` fo
 vishraam ranges) and `Transliteration` (`transcribe`, cached per line/scheme, only
 computed on demand). The Xcode project already carries a local Swift package
 reference to `../../packages/gurmukhi` — nothing further to add there.
+
+**Simulator builds are Apple Silicon only.** The xcframework has no Intel (x86_64)
+Simulator slice, so the project sets `EXCLUDED_ARCHS[sdk=iphonesimulator*] =
+x86_64`. Without it, any build for "any iOS Simulator" (including `apps/build.sh ios`
+without `--run`) tries to link x86_64 and fails. Device builds and App Store
+archives are arm64 only and are unaffected. To support Intel Macs, add
+`x86_64-apple-ios` to the gurmukhi Apple build rather than removing this setting.
 
 Building it is not part of `./apps/build.sh` yet when the xcframework is missing;
 see [`apps/README.md`](../README.md#packagesgurmukhi-in-the-apps) for the
@@ -114,8 +178,12 @@ Font version, licensing, and the rest of what's bundled and why:
 list, reader, Sant Lipi rendering, light/dark, pause colouring, both pronunciation
 schemes, toolbar A−/A+ sizing.
 
-**Unverified — written but never run:** focal-point pinch-to-zoom (the most recent
-work). Watch for whether the point under your fingers stays put during the gesture.
+**Verified on a real iPhone (2026-10-10):** Release configuration, version 0.3.0
+(72), signed with the team's development certificate. No problems found. This is the
+first device run; everything before it was Simulator only.
+
+**Pinch-to-zoom verified on device (2026-10-10):** the line under your fingers stays
+put, within the one-line-height limit below.
 
 **Known limitation:** focal zoom is accurate to within **one line height**, because
 `scrollTo(_:anchor:)` aligns a row's own anchor with the viewport's and cannot

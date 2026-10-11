@@ -159,9 +159,10 @@ Privacy policy <https://www.shabados.com/privacy/>. Both stores get
 legacy app shipped Sentry *and* PostHog, so this is a real reduction, not a claim to
 defend. Telemetry remains undecided (ADR-0007).
 
-Still outstanding before submission, on both: **signing/team**, and **bumping the
-version** — `versionCode 1` / `MARKETING_VERSION 0.1.0` are below what is live and
-will be rejected on upload.
+Signing, custody, and versions are platform-specific: see
+[android/README.md#signing](android/README.md#signing) and
+[ios/README.md#signing](ios/README.md#signing). Both apps start production at
+`0.3.0`.
 
 ## State of play
 
