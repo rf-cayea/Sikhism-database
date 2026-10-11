@@ -96,6 +96,23 @@ private final class RowFrames {
   var frames: [String: CGRect] = [:]
 }
 
+private extension CGRect {
+  /// Whole points. A frame read in the reader's space carries floating-point noise
+  /// that changes as it scrolls — a 36pt row reads 36.0, then 36.00000000000006,
+  /// then 36.0 again (logged on iPhone, 2026-10-11) — and SwiftUI logs "Geometry
+  /// action is cycling between duplicate values" when a reported value flips back
+  /// and forth like that. A point is far finer than a pinch or a tap needs.
+  ///
+  /// **The message still appears during a pinch, and that is expected.** Each step
+  /// changes the font size, lines re-wrap, and `LazyVStack` re-estimates rows it
+  /// has not measured, so frames really do move back and forth while the layout
+  /// settles. It costs a dictionary write per row: nothing here re-renders the
+  /// reader, so it cannot feed itself the way the old `PreferenceKey` did.
+  var roundedToPoints: CGRect {
+    CGRect(x: minX.rounded(), y: minY.rounded(), width: width.rounded(), height: height.rounded())
+  }
+}
+
 /// Turns off `UIScrollView.scrollsToTop` — the system behaviour where tapping
 /// the status bar snaps the frontmost scroll view straight to its absolute
 /// top — for the reader specifically. On by default for every `UIScrollView`,
@@ -240,7 +257,7 @@ struct BaniReaderView: View {
                 // "on the card" from "on the Expand button" apart (the
                 // button reports its own frame into this same dictionary,
                 // under a distinct key — see `ContinuationBlock`).
-                .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: {
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)).roundedToPoints } action: {
                   rowFrames.frames[item.id] = $0
                 }
                 // A row the lazy stack unloads stops reporting, and its last frame
@@ -955,7 +972,7 @@ private struct ContinuationBlock: View {
         // (`ZStack`, then this `.overlay`) did not reliably work, so the
         // row-level gesture instead checks the tap's location directly
         // against this frame.
-        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(BaniReaderView.space)) } action: {
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(BaniReaderView.space)).roundedToPoints } action: {
           frames.frames["expand:\(continuation.id)"] = $0
         }
         .onDisappear { frames.frames["expand:\(continuation.id)"] = nil }
