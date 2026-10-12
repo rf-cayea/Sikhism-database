@@ -35,11 +35,24 @@ project edit.
 | Display name | Shabad OS |
 | Icon | `brand/assets/lotus.svg`, via the legacy app's 1024px export |
 | App Privacy | **Data Not Collected** — true: no network, no SDKs |
+| Listing | Name "Shabad OS"; categories Reference, then Education; age rating 4+; primary language English (U.S.); support URL <https://www.shabados.com/support/> |
+| Seller | **"Bhajneet Kohli"** — see below |
+| EU (Digital Services Act) | Declared **not a trader**, so no address or phone is shown on EU product pages |
 | Orientations | iPad: all four (Apple requires it for Split View and resizable windows; Xcode warns without it). iPhone: portrait and both landscapes, Xcode's default — Face ID iPhones never turn upside-down whatever the app allows |
 
 Where the bundle id came from, why changing it forfeits the listing, the
 Sentry/PostHog reduction, and telemetry's ADR status are the same on both platforms
 — see [`apps/README.md#store-identity`](../README.md#store-identity).
+
+**The seller name is the membership's entity name**, not anything in Xcode or App
+Store Connect, and it is shown on every one of the team's apps. The entity is
+"Bhajneet Kohli" although the team is enrolled as an Organization. Shabad OS is a
+registered 501(c)(3), so the name can become "Shabad OS": developer.apple.com →
+Membership details → *Update your information*, with the legal name exactly as the
+IRS has it and a D-U-N-S number in that name. Approval renames the seller on every
+live app, with no resubmission; it also resets `identifierForVendor`, which this
+app does not use. Not yet requested as of 2026-10-11. Apple also offers nonprofits a
+fee waiver, worth asking for at the same time.
 
 App Store Connect app id `1510358282`. It had never been released to the App
 Store before this app: the legacy Expo app reached TestFlight only (versions
@@ -89,6 +102,12 @@ agreement is accepted, Certificates, Identifiers & Profiles is locked for everyo
 one. That keeps the team's most powerful account off build machines, and the
 procedure is then the same for every Admin.
 
+**Certificate names.** A certificate is labelled with the developer-profile name of
+whoever's Xcode created it, not with the team. Only the team sees it; customers
+never do. Archives are signed with the *Development* certificate and re-signed with
+the cloud-managed *Distribution* one at upload, so revoking a development
+certificate never affects a released build.
+
 ## Releasing
 
 1. **Rebuild `packages/gurmukhi`** from a real terminal:
@@ -108,8 +127,24 @@ procedure is then the same for every Admin.
 4. In Xcode, sign in under Settings → Apple Accounts with an Admin's Apple Account.
    Then choose *Any iOS Device* as the destination, and Product → Archive.
 5. In the Organizer that opens: Distribute App → App Store Connect → Upload.
-6. In App Store Connect, open the version in *Prepare for Submission*, select the
-   build once processing finishes, and Add for Review.
+6. Wait for processing (about 10–30 minutes). The processed build also goes to
+   TestFlight's internal group automatically ("ready to test" email). Installing it
+   from TestFlight is the last check on the exact binary App Review will see.
+7. In App Store Connect, open the version in *Prepare for Submission*, select the
+   build, and Add for Review. Its version must equal `MARKETING_VERSION`.
+
+**Screenshots** (first done 2026-10-11, designed outside the repo in AppLaunchpad).
+The upload slots take exact sizes only. The iPhone slot on the version page is the
+6.1"/6.3" one: **1206 × 2622** or 1179 × 2556. The iPad slot is 13": **2048 × 2732**
+or 2064 × 2752, and must show the app running on an iPad. Larger iPhone exports
+(1290 × 2796) are rejected there; convert them from a real terminal:
+
+```
+mkdir -p out && for f in *.jpg; do sips --resampleHeight 2622 "$f" --out "out/$f" && sips --cropToHeightWidth 2622 1206 "out/$f"; done
+```
+
+That trims about 2 px per side, since the shapes differ slightly. Watch and iPhone
+Duo slots can stay empty.
 
 `ITSAppUsesNonExemptEncryption = NO` is set, so uploads skip the export-compliance
 question. That is true while the app makes no network connections. Revisit it when
@@ -191,6 +226,9 @@ Font version, licensing, and the rest of what's bundled and why:
 **Verified working (2026-09-07):** builds, installs, and runs in Simulator. Bani
 list, reader, Sant Lipi rendering, light/dark, pause colouring, both pronunciation
 schemes, toolbar A−/A+ sizing.
+
+**Submitted to App Store review (2026-10-11):** 0.3.0 (72), set to release
+automatically on approval. Any further upload needs build 73.
 
 **Verified on a real iPhone (2026-10-10):** Release configuration, version 0.3.0
 (72), signed with the team's development certificate. No problems found. This is the

@@ -170,6 +170,9 @@ Signing, custody, and versions are platform-specific: see
 Both apps build, install, and run. Verified working: bani list, reader, Sant Lipi
 rendering, light/dark, A−/A+ sizing.
 
+**iOS 0.3.0 (72) was submitted to App Store review on 2026-10-11**
+([ios/README.md](ios/README.md#state-of-play)).
+
 **`packages/gurmukhi` is wired into the Swift package, added to the Xcode project,
 and verified** — see [above](#packagesgurmukhi-in-the-apps). In active use for pause
 colouring and both pronunciation schemes.
