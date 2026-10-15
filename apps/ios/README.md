@@ -256,7 +256,26 @@ needs iOS 18's `ScrollPosition` with offsets — available at this app's deploym
 target (26.0, [interaction.md](../../docs/interaction.md#platform-targets)) but not
 yet used.
 
-**Known inconsistency to resolve:** this app persists reader font size
-(`@AppStorage`); Android does not (in-memory only). Neither is obviously wrong but
-they should agree — likely persist on both, since an operator who sets a comfortable
-size should not have to redo it.
+**Known bug: rotation moves the reader upwards (seen on iPhone, 2026-10-15).** The
+bani stays open and settings are kept; only the scroll position moves. Observed:
+
+- Scrolled to an arbitrary spot, a rotation either way jumps upwards.
+- A line tapped in portrait stays at the top through a rotation to landscape and
+  back again.
+- A line tapped in landscape moves upwards on the rotation to portrait. That
+  includes a line tapped in landscape after a portrait tap that rotated correctly.
+- After that first jump, at least ten further rotations return to the same line in
+  each orientation, with no further drift.
+
+The reader is a `ScrollView` + `LazyVStack` with no `scrollPosition` binding, so a
+rotation keeps whatever SwiftUI anchors to, and rows above that were never measured
+at the new width are placed by estimated height. That is the same source of error
+as the pinch jitter above. Why landscape-to-portrait fails and portrait-to-landscape
+does not after a tap is not yet understood. **The likely fix is to own the
+position**: bind `scrollPosition` to the top row's id, or record the top row and put
+it back after a width change, the way the pinch puts its anchor back. Either way it
+is checked by repeating the observations above. Android restores the top row by key
+after a rotation ([android/README.md](../android/README.md#reader-state-across-recreation)).
+
+Reader font size is persisted on both platforms. Pauses, pronunciations and ratio
+are persisted here and not on Android ([apps/README.md](../README.md#state-of-play)).
