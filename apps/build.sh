@@ -63,20 +63,48 @@ ensure_assets() {
 # all come from it, and reimplementing them per platform is how two apps end up
 # disagreeing about the same line. Built when missing rather than every time -- unlike
 # the token and icon generators this is a full cargo build, and the first one fetches
-# the crate registry.
-ensure_gurmukhi() {
+# the crate registry. So a build that already has the outputs pays only a file check,
+# and a change to the Rust does NOT rebuild them: rerun the `mise run` named below by
+# hand after one. Each target builds only its own bindings: an Android build used to
+# build the xcframework and never the Android outputs.
+ensure_gurmukhi_apple() {
   local pkg="$REPO_DIR/packages/gurmukhi"
   local xcf="$pkg/bindings/swift/gurmukhiFFI.xcframework"
 
   [[ -d "$xcf" ]] && return
 
-  log "gurmukhi bindings missing -- building"
+  log "gurmukhi Apple bindings missing -- building"
   command -v mise >/dev/null \
     || die "mise not found, and the gurmukhi bindings are missing. Install mise, then: cd packages/gurmukhi && mise run apple"
   # Needs a writable ~/.cargo and ~/.rustup, so this cannot run under an agent
   # sandbox. The message says so rather than surfacing a rustup download error.
   ( cd "$pkg" && mise run apple ) \
     || die "gurmukhi build failed. If this ran inside an agent sandbox, run it from a real terminal: cd packages/gurmukhi && mise run apple"
+}
+
+# The Android half: the Kotlin bindings Bani.kt imports, and one libgurmukhi.so per
+# ABI. Without them Gradle fails with dozens of "Unresolved reference 'uniffi'" errors
+# in Bani.kt that do not say what is missing. Every ABI is checked, not just the
+# directory, so an interrupted cargo-ndk run is rebuilt rather than shipping an APK
+# that crashes on the ABIs it skipped.
+ensure_gurmukhi_android() {
+  local pkg="$REPO_DIR/packages/gurmukhi"
+  local jni="$APPS_DIR/android/app/src/main/jniLibs"
+  local missing=0 abi
+
+  [[ -n "$(ls -A "$pkg/bindings/kotlin/lib" 2>/dev/null)" ]] || missing=1
+  for abi in arm64-v8a armeabi-v7a x86_64 x86; do
+    [[ -f "$jni/$abi/libgurmukhi.so" ]] || missing=1
+  done
+  [[ "$missing" == 0 ]] && return
+
+  log "gurmukhi Android bindings missing -- building"
+  command -v mise >/dev/null \
+    || die "mise not found, and the gurmukhi bindings are missing. Install mise, then: cd packages/gurmukhi && mise run android"
+  # Also needs cargo-ndk and ANDROID_NDK_HOME (one-time setup, apps/README.md); the
+  # mise task names whichever is missing.
+  ( cd "$pkg" && mise run android ) \
+    || die "gurmukhi build failed. It needs cargo-ndk and ANDROID_NDK_HOME (see apps/README.md). If this ran inside an agent sandbox, run it from a real terminal: cd packages/gurmukhi && mise run android"
 }
 
 # Colour and type live in packages/design/tokens.md and are generated into both
@@ -269,15 +297,22 @@ build_android() {
 ensure_assets
 ensure_tokens
 ensure_icons
-ensure_gurmukhi
 
 case "$TARGET" in
-  ios) build_ios ;;
-  android) build_android ;;
+  ios)
+    ensure_gurmukhi_apple
+    build_ios
+    ;;
+  android)
+    ensure_gurmukhi_android
+    build_android
+    ;;
   both)
     # Android first: it fails faster and its errors are easier to read than a
     # 200-line xcodebuild dump.
+    ensure_gurmukhi_android
     build_android
+    ensure_gurmukhi_apple
     build_ios
     ;;
 esac

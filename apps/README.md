@@ -66,7 +66,7 @@ cd packages/gurmukhi && mise run apple
 ```
 
 That builds the library for macOS, iOS device, and iOS Simulator, generates the Swift
-bindings, and assembles `bindings/swift/gurmukhiFFI.xcframework`. `apps/build.sh` runs
+bindings, and assembles `bindings/swift/gurmukhiFFI.xcframework`. `apps/build.sh ios` runs
 it when the xcframework is missing. **It cannot run under an agent sandbox** — cargo
 needs a writable `~/.cargo` and rustup a writable `~/.rustup`, the same reason Gradle
 and `xcrun` fail there.
@@ -108,9 +108,13 @@ That cross-compiles the four ABIs Play requires (via `cargo-ndk`) straight into
 `apps/android/app/src/main/jniLibs/`, and generates the Kotlin bindings into
 `bindings/kotlin/lib/`. `apps/android/app/build.gradle.kts` already points its main
 source set at that `lib/` directory and carries the JNA runtime dependency the
-generated bindings call into — nothing further to wire up in Gradle. **Not run
-automatically by `apps/build.sh`** the way the Apple path is, since the one-time NDK
-install below is not something a build script can do for you.
+generated bindings call into — nothing further to wire up in Gradle. **`apps/build.sh
+android` runs it when any output is missing** (2026-10-15): the Kotlin bindings, or
+`libgurmukhi.so` for any of the four ABIs. Otherwise it skips the build, so a checkout that
+already has them pays only a file check. A change to the Rust is not picked up: rerun
+the command above by hand. The one-time NDK install below is still yours to do. The
+script cannot, and fails naming what is missing. Without the outputs, Gradle run
+directly fails with "Unresolved reference 'uniffi'" throughout `Bani.kt`.
 
 **Needs `cargo-ndk` and the NDK itself, once, before the command above works**:
 `cargo install cargo-ndk`, then install an NDK version via Android Studio's SDK
