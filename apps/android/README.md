@@ -223,6 +223,9 @@ size is already persisted (see [Reader size and pinch](#reader-size-and-pinch)).
   be restored in the same first composition, so the saved index points into the
   expanded list. After a rotation, the same row is at the top. Its offset within
   that row is pixels, so it can shift when lines rewrap at the new width.
+  **Verified on a phone 2026-10-15**: the top line stays put through repeated
+  rotations in any order, whether it was tapped or scrolled to. iOS drifts in the
+  same test ([ios/README.md](../ios/README.md#state-of-play)).
 - **Recreation must be cheap, because rotation waits for it.** Android starts the
   rotation only once the recreated activity has drawn its first frame. Parsing the
   corpus in `App()` held every rotation for 130–150 skipped frames on a phone

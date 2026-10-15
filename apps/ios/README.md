@@ -275,7 +275,9 @@ does not after a tap is not yet understood. **The likely fix is to own the
 position**: bind `scrollPosition` to the top row's id, or record the top row and put
 it back after a width change, the way the pinch puts its anchor back. Either way it
 is checked by repeating the observations above. Android restores the top row by key
-after a rotation ([android/README.md](../android/README.md#reader-state-across-recreation)).
+after a rotation and, in the same test on a phone, does not drift, whether the
+line was tapped or scrolled to
+([android/README.md](../android/README.md#reader-state-across-recreation)).
 
 Reader font size is persisted on both platforms. Pauses, pronunciations and ratio
 are persisted here and not on Android ([apps/README.md](../README.md#state-of-play)).
