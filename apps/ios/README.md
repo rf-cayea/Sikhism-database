@@ -279,5 +279,5 @@ after a rotation and, in the same test on a phone, does not drift, whether the
 line was tapped or scrolled to
 ([android/README.md](../android/README.md#reader-state-across-recreation)).
 
-Reader font size is persisted on both platforms. Pauses, pronunciations and ratio
-are persisted here and not on Android ([apps/README.md](../README.md#state-of-play)).
+Reader font size, pauses, pronunciations and ratio are persisted on both
+platforms, under the same keys ([apps/README.md](../README.md#state-of-play)).

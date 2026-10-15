@@ -203,8 +203,12 @@ test. The same goes for [reader state across recreation](#reader-state-across-re
 
 Rotation, a theme change, a system Font size change and process death all destroy
 and recreate `MainActivity`. **What the person had open comes back**: the open bani,
-the scroll position, pauses, pronunciations, ratio and expanded continuations. Font
-size is already persisted (see [Reader size and pinch](#reader-size-and-pinch)).
+the scroll position, pauses, pronunciations, ratio and expanded continuations.
+Font size, pauses, pronunciations and ratio come back because they are persisted
+across launches, in the `reader` SharedPreferences under iOS's `@AppStorage` keys
+(`ReaderSettings` in `ReaderPreferences.kt`; [Reader size and pinch](#reader-size-and-pinch)).
+Each is written only when the person changes it, so an untouched setting keeps
+following its default (`ReaderDefaults`, pinned by `ReaderDefaultsTest`).
 
 - **`rememberSaveable`, not `android:configChanges`.** `configChanges` only covers
   the changes it lists, so process death would still lose state. It also leaves the
@@ -236,10 +240,10 @@ size is already persisted (see [Reader size and pinch](#reader-size-and-pinch)).
   after any change to what `onCreate` or the first composition does.
 - **Transient state stays plain `remember`**: the pinch anchor and its highlight,
   the live pinch size, and whether the Controls menu is open.
-- **Recreation only, not launches.** The settings reset when the reader closes, and
-  a cold launch opens the list. Persisting the settings across launches the way iOS
-  does is a separate, unmade change. Whether a cold launch resumes the last bani
-  belongs to the journeys work (docs/requirements/journeys.md), not here.
+- **The open bani, scroll position and expanded continuations last for recreation
+  only, not launches.** A cold launch opens the list, and each bani opens with its
+  continuations collapsed. Whether a cold launch resumes the last bani belongs to
+  the journeys work (docs/requirements/journeys.md), not here.
 - **No Compose UI test.** `StateRestorationTester` needs
   `androidx.compose.ui:ui-test-junit4` plus instrumented or Robolectric tests, which
   is a dependency decision that has not been made. Checked by hand instead: with the

@@ -493,14 +493,26 @@ fun BaniReader(bani: Bani, onBack: () -> Unit) {
   var livePinchSize by remember { mutableStateOf<Float?>(null) }
   val readerSize = livePinchSize ?: ReaderSize.displaySize(savedSize, isTablet)
 
-  // Saveable, not remember: rotation, a theme or font size change, and process death
-  // recreate the activity, and the reader must come back as the person left it. Not
-  // persisted across launches as iOS does (apps/README.md#state-of-play). Saved state
-  // ends when the reader closes, so each bani still opens with these defaults.
-  var pauses by rememberSaveable { mutableStateOf(true) }
-  var pronDevanagari by rememberSaveable { mutableStateOf(false) }
-  var pronLatin by rememberSaveable { mutableStateOf(false) }
-  var ratio by rememberSaveable { mutableFloatStateOf(DesignTokens.RATIO_DEFAULT) }
+  // Saved across launches, as on iOS (docs/requirements/display-controls.md#persistence),
+  // the same way as the size above: read once, written on each change. That also
+  // brings them back after the activity is recreated, so they need no saveable state.
+  val settings = remember(context) { context.readerSettings() }
+  var pauses by remember { mutableStateOf(settings.pauses) }
+  var pronDevanagari by remember { mutableStateOf(settings.pronDevanagari) }
+  var pronLatin by remember { mutableStateOf(settings.pronLatin) }
+  val ratio = remember { settings.ratio }
+  fun savePauses(value: Boolean) {
+    pauses = value
+    settings.pauses = value
+  }
+  fun savePronDevanagari(value: Boolean) {
+    pronDevanagari = value
+    settings.pronDevanagari = value
+  }
+  fun savePronLatin(value: Boolean) {
+    pronLatin = value
+    settings.pronLatin = value
+  }
   val schemes = remember(pronDevanagari, pronLatin) {
     buildList {
       if (pronDevanagari) add(Pronunciation.DEVANAGARI)
@@ -613,18 +625,18 @@ fun BaniReader(bani: Bani, onBack: () -> Unit) {
           DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
             DropdownMenuItem(
               text = { Text("Pauses") },
-              trailingIcon = { Checkbox(checked = pauses, onCheckedChange = { pauses = it }) },
-              onClick = { pauses = !pauses },
+              trailingIcon = { Checkbox(checked = pauses, onCheckedChange = { savePauses(it) }) },
+              onClick = { savePauses(!pauses) },
             )
             DropdownMenuItem(
               text = { Text(Pronunciation.DEVANAGARI.label) },
-              trailingIcon = { Checkbox(checked = pronDevanagari, onCheckedChange = { pronDevanagari = it }) },
-              onClick = { pronDevanagari = !pronDevanagari },
+              trailingIcon = { Checkbox(checked = pronDevanagari, onCheckedChange = { savePronDevanagari(it) }) },
+              onClick = { savePronDevanagari(!pronDevanagari) },
             )
             DropdownMenuItem(
               text = { Text(Pronunciation.LATIN.label) },
-              trailingIcon = { Checkbox(checked = pronLatin, onCheckedChange = { pronLatin = it }) },
-              onClick = { pronLatin = !pronLatin },
+              trailingIcon = { Checkbox(checked = pronLatin, onCheckedChange = { savePronLatin(it) }) },
+              onClick = { savePronLatin(!pronLatin) },
             )
           }
         },

@@ -195,10 +195,11 @@ on device 2026-10-10; Android was ported 2026-10-14
 
 **Reader font size is persisted on both, and starts from the system text setting
 once** ([display-controls.md](../docs/requirements/display-controls.md#starting-size)).
-Still inconsistent: iOS also persists pauses, pronunciations and ratio across
-launches. Android keeps them, the open bani and the scroll position across
-rotation, theme and font size changes, and process death, but not across launches
-([android/README.md](android/README.md#reader-state-across-recreation)).
+Pauses, pronunciations and ratio are persisted on both too, under the same keys
+(`pauses`, `pronDevanagari`, `pronLatin`, `ratio`); Android since 2026-10-15.
+Android has no Ratio control yet, so it only reads that one. Android also keeps the
+open bani and the scroll position across rotation, theme and font size changes,
+and process death ([android/README.md](android/README.md#reader-state-across-recreation)).
 
 Known limitation: iOS focal zoom is accurate to within **one line height**, because
 `scrollTo(_:anchor:)` aligns a row's own anchor with the viewport's and cannot

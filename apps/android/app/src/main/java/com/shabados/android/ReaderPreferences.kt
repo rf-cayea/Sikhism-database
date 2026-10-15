@@ -31,6 +31,49 @@ class PreferencesSizeStore(private val prefs: SharedPreferences) : SizeStore {
 
 fun Context.readerSizeStore() = PreferencesSizeStore(getSharedPreferences("reader", Context.MODE_PRIVATE))
 
+/** What the reader shows before the person changes anything
+ * (docs/requirements/display-controls.md#pauses, #pronunciations, #ratio). */
+object ReaderDefaults {
+  const val PAUSES = true
+  const val PRON_DEVANAGARI = false
+  const val PRON_LATIN = false
+  const val RATIO = DesignTokens.RATIO_DEFAULT
+}
+
+/**
+ * Pauses, pronunciations and ratio, saved across launches as on iOS
+ * (docs/requirements/display-controls.md#persistence). The keys are iOS's
+ * `@AppStorage` keys in BaniReaderView.swift, so a setting has one name on both.
+ * **A value is written only when the person changes it**, so a setting never
+ * touched keeps following [ReaderDefaults] if a default changes.
+ */
+class ReaderSettings(private val prefs: SharedPreferences) {
+  var pauses: Boolean
+    get() = prefs.getBoolean(PAUSES, ReaderDefaults.PAUSES)
+    set(value) = prefs.edit().putBoolean(PAUSES, value).apply()
+
+  var pronDevanagari: Boolean
+    get() = prefs.getBoolean(PRON_DEVANAGARI, ReaderDefaults.PRON_DEVANAGARI)
+    set(value) = prefs.edit().putBoolean(PRON_DEVANAGARI, value).apply()
+
+  var pronLatin: Boolean
+    get() = prefs.getBoolean(PRON_LATIN, ReaderDefaults.PRON_LATIN)
+    set(value) = prefs.edit().putBoolean(PRON_LATIN, value).apply()
+
+  /** Read only: Android has no Ratio control yet. Read anyway so that, once one
+   * lands, a saved ratio is already honoured. */
+  val ratio: Float get() = prefs.getFloat(RATIO, ReaderDefaults.RATIO)
+
+  private companion object {
+    const val PAUSES = "pauses"
+    const val PRON_DEVANAGARI = "pronDevanagari"
+    const val PRON_LATIN = "pronLatin"
+    const val RATIO = "ratio"
+  }
+}
+
+fun Context.readerSettings() = ReaderSettings(getSharedPreferences("reader", Context.MODE_PRIVATE))
+
 /**
  * The dp Android gives [DesignTokens.ANDROID_BODY_SIZE] sp at the person's Font size.
  * `applyDimension` goes through the display's font scale converter, so this follows

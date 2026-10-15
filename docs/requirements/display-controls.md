@@ -13,9 +13,9 @@ only on wide surfaces; everything else appears everywhere.
 **Controls persist across compositions and across launches.** Someone who set a
 comfortable size for Japji Sahib must not have to set it again for the next shabad,
 or tomorrow. This is a settled expectation from v2 and from the web app. **Both
-mobile apps persist reader font size** (Android since 2026-10-14). iOS also persists
-pauses, pronunciations and ratio; **Android does not yet**
-([apps/README.md](../../apps/README.md#state-of-play)).
+mobile apps persist reader font size, pauses, pronunciations and ratio** (Android
+since 2026-10-14 for size, 2026-10-15 for the rest;
+[apps/README.md](../../apps/README.md#state-of-play)).
 
 **Controls are per-device**, matching the display config in
 [ADR-0002](../architecture/decisions/0002-view-modes-and-overlay-endpoints.md).
