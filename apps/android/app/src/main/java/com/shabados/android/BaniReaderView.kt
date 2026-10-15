@@ -30,12 +30,13 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -59,6 +60,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.withStyle
@@ -567,12 +571,30 @@ fun BaniReader(bani: Bani, onBack: () -> Unit) {
         // actions leave the title a few characters' width, and wrapping broke it
         // into a column of syllables that pushed the reader down the screen.
         title = { Text(bani.latin, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-        navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
+        // Icon buttons, not text, matching iOS: the text buttons scaled with Font
+        // size and at the largest Font and Display size left the title only "…".
+        // Icons are sized in dp and do not scale. R.drawable rather than
+        // AppIcons.back's string: a missing drawable is then a compile error, not
+        // a blank button. ToolbarIconsTest checks the names agree.
+        navigationIcon = {
+          IconButton(onClick = onBack) { Icon(painterResource(R.drawable.ic_back), contentDescription = "Back") }
+        },
         actions = {
-          TextButton(onClick = { saveSize(DesignTokens.clamp(readerSize - 2f, isTablet)) }) { Text("A-") }
-          TextButton(onClick = { saveSize(DesignTokens.clamp(readerSize + 2f, isTablet)) }) { Text("A+") }
+          // Letters, not icons: "a" and "A", chosen by the author 2026-10-15. These
+          // two buttons go when the Controls sidebar lands, so they have no rows in
+          // packages/design/icons.md. Sized in dp, like the icons beside them,
+          // so the system Font size cannot widen them.
+          val letterSize = with(LocalDensity.current) { 20.dp.toSp() }
+          IconButton(onClick = { saveSize(DesignTokens.clamp(readerSize - 2f, isTablet)) }) {
+            Text("a", fontSize = letterSize, modifier = Modifier.clearAndSetSemantics { contentDescription = "Smaller" })
+          }
+          IconButton(onClick = { saveSize(DesignTokens.clamp(readerSize + 2f, isTablet)) }) {
+            Text("A", fontSize = letterSize, modifier = Modifier.clearAndSetSemantics { contentDescription = "Larger" })
+          }
           var menuOpen by remember { mutableStateOf(false) }
-          TextButton(onClick = { menuOpen = true }) { Text("⋯") }
+          IconButton(onClick = { menuOpen = true }) {
+            Icon(painterResource(R.drawable.ic_controls), contentDescription = "Controls")
+          }
           DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
             DropdownMenuItem(
               text = { Text("Pauses") },

@@ -163,6 +163,32 @@ on the JVM. `BaniReaderView.kt` only measures and draws.
 [tokens.md's Android table](../../packages/design/tokens.md#starting-size-on-android)
 is interpolated from AOSP's font-scale tables, not measured.
 
+## Reader toolbar
+
+**Icon buttons, not text** (2026-10-15). The text buttons (Back, A-, A+, ⋯) scaled
+with the system Font size. At the largest Font size and Display size they took most
+of the width and left the bani title as "…". Icons are dp and do not scale:
+
+- **Back and Controls** are vector drawables in `res/drawable/` (`ic_back`, Material
+  Symbol `arrow_back`; `ic_controls`, Lucide `settings-2`). Where they came from and
+  how they were imported is recorded in
+  [icons.md](../../packages/design/icons.md#android-drawables). The toolbar uses
+  `R.drawable.*`, not `AppIcons`' strings through `getIdentifier`, so a missing
+  drawable fails the build instead of drawing a blank button. `ToolbarIconsTest`
+  checks the names still match `AppIcons`.
+- **Smaller and Larger are the letters "a" and "A"**, chosen by the author. They have
+  no icons.md rows, because they go away when the Controls sidebar lands. Their
+  size is 20dp converted to sp, so like the icons they ignore Font size.
+- **Not `material-icons-extended`.** It is a large artifact holding the older Material
+  Icons rather than the Material Symbols that icons.md names. Hand-imported
+  drawables are what `AppIcons.kt` was generated for.
+
+Content descriptions are "Back", "Smaller", "Larger", "Controls", matching the
+iOS button labels.
+
+**Verified on device 2026-10-15**, light and dark, at maximum Font size and
+Display size: the bani title shows readable text.
+
 ## Tests
 
 ```

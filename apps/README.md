@@ -170,6 +170,11 @@ Signing, custody, and versions are platform-specific: see
 Both apps build, install, and run. Verified working: bani list, reader, Sant Lipi
 rendering, light/dark, A−/A+ sizing.
 
+**The reader toolbar is icons on both platforms.** Android moved from text buttons to
+icons on 2026-10-15 ([android/README.md](android/README.md#reader-toolbar)), with
+Smaller/Larger drawn as the letters "a"/"A" and iOS keeping its SF Symbols. Both
+are stand-ins until the Controls sidebar replaces them.
+
 **iOS 0.3.0 (72) was submitted to App Store review on 2026-10-11**
 ([ios/README.md](ios/README.md#state-of-play)).
 

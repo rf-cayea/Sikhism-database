@@ -51,7 +51,14 @@ Pin the version and record each copy here. To add one, fetch
 
 | Lucide | Package | Version | Source | Licence | Copied to |
 | --- | --- | --- | --- | --- | --- |
-| `settings-2` | `lucide-static` | 1.55.0 (current on 2026-10-10) | <https://unpkg.com/lucide-static@1.55.0/icons/settings-2.svg> | ISC | `apps/ios/ShabadOS/Assets.xcassets/settings-2.imageset/` |
+| `settings-2` | `lucide-static` | 1.55.0 (current on 2026-10-10) | <https://unpkg.com/lucide-static@1.55.0/icons/settings-2.svg> | ISC | `apps/ios/ShabadOS/Assets.xcassets/settings-2.imageset/`; `apps/android/app/src/main/res/drawable/ic_controls.xml` |
+
+**On Android a Lucide icon is a vector drawable translated by hand** from the same
+SVG, named as in `AppIcons.kt` (`ic_controls`, not `settings_2`). Vector drawables
+have no `<circle>`, so each circle becomes two arcs; the paths, stroke width, caps
+and joins are copied unchanged, with the source element kept as a comment above each
+path. The stroke colour is irrelevant for the same reason as on iOS: Compose's `Icon`
+tints the shape with `LocalContentColor`.
 
 The licence is ISC, from the package's `LICENSE`; it ships in the SVG's first line as
 `@license lucide-static v1.55.0 - ISC`. A few Lucide icons derived from Feather are
@@ -69,6 +76,20 @@ additionally MIT; check that file's list before adding one. `settings-2` is not 
 > OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA
 > OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION,
 > ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+## Android drawables
+
+**Material Symbols icons are copied from `google/material-design-icons`**, whose
+`symbols/android/<name>/materialsymbolsoutlined/<name>_24px.xml` files are already
+vector drawables.
+Licence Apache-2.0. Each is saved to `res/drawable/` under its `AppIcons.kt` name
+with one change: **upstream's `android:tint="?attr/colorControlNormal"` is
+removed.** That attr is defined by AppCompat/MDC, which the app does not depend on,
+and Compose's `Icon` tints regardless. Pin the commit and record each copy here.
+
+| Material Symbol | Commit | Source | Licence | Copied to |
+| --- | --- | --- | --- | --- |
+| `arrow_back` | `6d7ca43bd6e6668531a00fcaca06d921b63dd716` (latest for that file on 2026-10-15) | `symbols/android/arrow_back/materialsymbolsoutlined/arrow_back_24px.xml` | Apache-2.0 | `apps/android/app/src/main/res/drawable/ic_back.xml` |
 
 ## Icons
 
