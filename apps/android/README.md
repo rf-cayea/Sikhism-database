@@ -251,7 +251,11 @@ following its default (`ReaderDefaults`, pinned by `ReaderDefaultsTest`).
   both ways, (2) toggle dark theme, (3) change Font size, (4) with Developer options
   > "Don't keep activities" on, switch away and back, (5) `adb shell am kill
   com.shabados.app` while in the background, then reopen from Recents. All five
-  passed on a phone 2026-10-15.
+  passed on a phone 2026-10-15. **Scripted** as
+  `bun apps/android/scripts/check-restore.ts`, which drives an attached device
+  through adb alone and puts every setting back. Run it when a change touches the
+  reader's state, the activity, or the first composition, not on every commit. It
+  does not judge how quickly the screen rotates. 10/10 on a phone 2026-10-15.
 - **Leave with Home, not Back.** Back closes the reader by design, and a second Back
   closes the app, so the list showing afterwards is correct.
 - **Start the app from its icon before testing a return through the icon.**
