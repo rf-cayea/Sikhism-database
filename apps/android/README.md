@@ -245,7 +245,19 @@ size is already persisted (see [Reader size and pinch](#reader-size-and-pinch)).
   is a dependency decision that has not been made. Checked by hand instead: with the
   reader scrolled partway, pauses toggled and a continuation expanded, (1) rotate
   both ways, (2) toggle dark theme, (3) change Font size, (4) with Developer options
-  > "Don't keep activities" on, switch away and back.
+  > "Don't keep activities" on, switch away and back, (5) `adb shell am kill
+  com.shabados.app` while in the background, then reopen from Recents. All five
+  passed on a phone 2026-10-15.
+- **Leave with Home, not Back.** Back closes the reader by design, and a second Back
+  closes the app, so the list showing afterwards is correct.
+- **Start the app from its icon before testing a return through the icon.**
+  `apps/build.sh --run` launches with `am start -n`, which is not the intent the
+  home-screen icon sends. In a task started that way, tapping the icon started a
+  fresh activity on top, showing the list, while Recents restored correctly. Swipe
+  the app away and open it from the icon first, and the icon restores too. Play
+  installs are opened from the icon, so users never see this.
+- **Swiping the app away in Recents discards saved state**, so it opens to the list.
+  That is the cold launch this change leaves alone.
 
 ## Content
 
