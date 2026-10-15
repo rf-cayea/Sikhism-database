@@ -223,6 +223,14 @@ size is already persisted (see [Reader size and pinch](#reader-size-and-pinch)).
   be restored in the same first composition, so the saved index points into the
   expanded list. After a rotation, the same row is at the top. Its offset within
   that row is pixels, so it can shift when lines rewrap at the new width.
+- **Recreation must be cheap, because rotation waits for it.** Android starts the
+  rotation only once the recreated activity has drawn its first frame. Parsing the
+  corpus in `App()` held every rotation for 130–150 skipped frames on a phone
+  (2026-10-15, `adb logcat -s Choreographer:I`), on the list and the reader alike.
+  `Corpus.load` now parses once per process. Afterwards, rotations logged nothing:
+  Choreographer reports only stalls of 30 frames or more. The cold launch still
+  skips about 185. Measure with that same logcat line
+  after any change to what `onCreate` or the first composition does.
 - **Transient state stays plain `remember`**: the pinch anchor and its highlight,
   the live pinch size, and whether the Controls menu is open.
 - **Recreation only, not launches.** The settings reset when the reader closes, and
