@@ -93,7 +93,41 @@ private extension View {
 /// object SwiftUI does not observe cannot schedule a render, so there is no loop.
 /// Do not make this `@Observable`.
 private final class RowFrames {
+  /// Keyed by `ReaderItem.id` for a whole row. Two other kinds of key share it:
+  /// `expand:<continuation id>` for a "Keep reading" card's Expand button, and
+  /// `gurmukhi:<ReaderItem.id>` for the Gurmukhi text alone within a line's row
+  /// (read by `BaniReaderView.topLine`, which must not count a row by its
+  /// transliterations).
   var frames: [String: CGRect] = [:]
+
+  /// Whole rows only, without the Expand buttons and Gurmukhi texts.
+  var rows: [String: CGRect] {
+    frames.filter { !$0.key.hasPrefix("expand:") && !$0.key.hasPrefix(Self.gurmukhiPrefix) }
+  }
+
+  static let gurmukhiPrefix = "gurmukhi:"
+}
+
+/// The line a rotation keeps at the top, by `ReaderItem.id`; see
+/// `BaniReaderView.holdOrRestore`.
+///
+/// **A plain class, deliberately not observed**, like `RowFrames`: it is written
+/// on every scroll, and must not re-render the reader each time.
+private final class HeldRow {
+  var id: String?
+  /// The width `id` was recorded at. 0 until the first measurement, which then
+  /// reads as a width change with nothing to put back.
+  var width: CGFloat = 0
+  /// True from a width change until the line has been put back. Frames reported
+  /// in between are the relayout's, so nothing is recorded from them.
+  var restoring = false
+}
+
+/// What the reader reads from the scroll view's geometry. `offsetY` is not read;
+/// it is here so a scroll counts as a change.
+private struct ScrollSample: Equatable {
+  var offsetY: CGFloat
+  var width: CGFloat
 }
 
 private extension CGRect {
@@ -205,6 +239,9 @@ struct BaniReaderView: View {
   /// The row under the fingers, and where on screen it sat when the pinch started.
   @State private var focalID: String?
   @State private var focalFraction: CGFloat = 0.5
+
+  /// `@State` only to keep one instance for the view's lifetime.
+  @State private var heldRow = HeldRow()
 
   /// The size the reader draws at. Kept within the zoom range here rather than
   /// only when the size changes, so a saved size from a wider range (an older
@@ -329,6 +366,12 @@ struct BaniReaderView: View {
           .background(ScrollsToTopDisabler())
         }
         .coordinateSpace(name: Self.space)
+        // Keeps the line being read through a rotation; see `holdOrRestore`.
+        .onScrollGeometryChange(for: ScrollSample.self) {
+          ScrollSample(offsetY: $0.contentOffset.y, width: $0.containerSize.width)
+        } action: { _, sample in
+          holdOrRestore(sample, items: Self.expanded(bani.items, expandedContinuations), proxy: proxy)
+        }
         // simultaneousGesture, not gesture: a ScrollView installs its own
         // recognisers and an exclusive .gesture loses to them.
         .simultaneousGesture(pinchToZoom(proxy: proxy))
@@ -362,7 +405,8 @@ struct BaniReaderView: View {
         pauses: pauses,
         schemes: schemes,
         ratio: ratio,
-        precededByTitle: precededByTitle
+        precededByTitle: precededByTitle,
+        gurmukhiFrame: (rowFrames, RowFrames.gurmukhiPrefix + item.id)
       )
     case .continuation(let continuation):
       // Only ever reached collapsed — `Self.expanded` already replaces an
@@ -514,13 +558,12 @@ struct BaniReaderView: View {
   /// The row under the fingers if there is one. **A pinch that starts in the gap
   /// between two rows still picks one: the one nearer the middle of the screen**,
   /// not the one nearer the top or bottom edge. So a gap in the top half takes
-  /// the row below it, and a gap in the bottom half the row above it. Only rows
-  /// count. The "Keep reading" Expand buttons report their frames into the same
-  /// dictionary under `expand:` keys, and are never an anchor.
+  /// the row below it, and a gap in the bottom half the row above it. Only whole
+  /// rows count (`RowFrames.rows`): the Expand buttons and Gurmukhi texts that
+  /// share the dictionary are never an anchor.
   private static func pinchAnchor(
-    at y: CGFloat, in frames: [String: CGRect], viewportHeight: CGFloat
+    at y: CGFloat, in rows: [String: CGRect], viewportHeight: CGFloat
   ) -> String? {
-    let rows = frames.filter { !$0.key.hasPrefix("expand:") }
     if let under = rows.first(where: { $0.value.minY <= y && y <= $0.value.maxY }) {
       return under.key
     }
@@ -528,6 +571,78 @@ struct BaniReaderView: View {
     let below = rows.filter { $0.value.minY > y }.min { $0.value.minY < $1.value.minY }
     let inTopHalf = y < viewportHeight / 2
     return (inTopHalf ? below ?? above : above ?? below)?.key
+  }
+
+  /// Keeps the line being read at the top through a rotation (or an iPad window
+  /// resize): records `topLine` on every scroll while the width is unchanged, and
+  /// after the width changes puts it back with `scrollTo(_:anchor: .top)`, the
+  /// call a tap uses.
+  ///
+  /// **Done by hand because SwiftUI does not keep it.** Left alone, a rotation
+  /// keeps whatever the scroll view anchors to, and rows above that were never
+  /// measured at the new width are placed by estimated height, so the reader
+  /// jumped upwards (iPhone, 2026-10-15). **A `ScrollPosition` binding is not
+  /// used**: it chooses for itself which row is at the top, and on a rotation it
+  /// also left the reader shifted 16pt sideways until the next scroll.
+  ///
+  /// Nothing is recorded from a width change until the line has been put back:
+  /// the relayout reports new frames first, and recording from them would hold
+  /// the wrong line. A held id no longer in the list (a continuation since
+  /// expanded) is left alone.
+  private func holdOrRestore(_ sample: ScrollSample, items: [ReaderItem], proxy: ScrollViewProxy) {
+    guard sample.width == heldRow.width else {
+      heldRow.width = sample.width
+      if let id = heldRow.id, items.contains(where: { $0.id == id }) {
+        heldRow.restoring = true
+        // Deferred so the new width has laid out; recording resumes a turn
+        // later, once the scroll has.
+        DispatchQueue.main.async {
+          proxy.scrollTo(id, anchor: .top)
+          DispatchQueue.main.async { heldRow.restoring = false }
+        }
+      }
+      return
+    }
+
+    // Deferred so the rows' frames from this same layout pass are the ones read;
+    // dropped if the width has changed since.
+    let width = sample.width
+    DispatchQueue.main.async {
+      guard heldRow.width == width, !heldRow.restoring else { return }
+      if let id = Self.topLine(in: rowFrames) { heldRow.id = id }
+    }
+  }
+
+  /// The line a rotation keeps at the top: **the first row with at least 40% of
+  /// its Gurmukhi showing below the bar** (chosen 2026-10-15).
+  ///
+  /// - **Only the Gurmukhi counts**, from its own frame (`gurmukhi:` keys), because
+  ///   transliterations make rows longer or shorter. A row showing only its
+  ///   transliteration, or only the descenders of its Gurmukhi, passes to the
+  ///   next. A "Keep reading" card has no separate Gurmukhi, so its whole frame
+  ///   counts.
+  /// - **40% of the Gurmukhi's whole height**, however many lines it wraps to, so
+  ///   it means the same at any size and width. Any part at all was too little: 14pt
+  ///   of descenders under the bar held a line whose Gurmukhi was out of sight.
+  /// - **"Below the bar" is 0 in `space`.** Measured on an iPhone: the row just
+  ///   below the bar reads `minY` 0 in portrait and landscape. The scroll view's
+  ///   `contentInsets.top` and `safeAreaInsets.top` both report the bar's height
+  ///   (113 / 78) and **must not be subtracted**: with either, the line at the top
+  ///   counted as hidden and every rotation moved the reader down one line.
+  private static let minimumShowing: CGFloat = 0.4
+
+  private static func topLine(in frames: RowFrames) -> String? {
+    let all = frames.frames
+    return frames.rows
+      .filter {
+        let gurmukhi = all[RowFrames.gurmukhiPrefix + $0.key] ?? $0.value
+        // Only the bar cuts off the rows that matter here: the nearest to the top
+        // is wanted, so the bottom of the screen is irrelevant.
+        let showing = gurmukhi.maxY - max(gurmukhi.minY, 0)
+        return showing > 0 && showing >= gurmukhi.height * minimumShowing
+      }
+      .min { $0.value.minY < $1.value.minY }?
+      .key
   }
 
   /// The font size changes live, and the reading position is corrected once, at
@@ -554,7 +669,7 @@ struct BaniReaderView: View {
           // reader's coordinate space, so they are directly comparable.
           let y = value.startLocation.y
           focalFraction = min(1, max(0, y / max(viewportHeight, 1)))
-          focalID = Self.pinchAnchor(at: y, in: rowFrames.frames, viewportHeight: viewportHeight)
+          focalID = Self.pinchAnchor(at: y, in: rowFrames.rows, viewportHeight: viewportHeight)
           // Shows which row the pinch is anchored to, with the same wash a tap
           // uses, so its drift during the pinch and its return on release can be
           // followed.
@@ -620,6 +735,9 @@ private struct LineText: View {
   /// don't yet compute this, keep today's spacing rather than silently losing
   /// it.
   var precededByTitle = false
+  /// Where to report the Gurmukhi text's own frame, and under which key; see
+  /// `BaniReaderView.topLine`. Transliterations are not part of it.
+  var gurmukhiFrame: (frames: RowFrames, key: String)?
 
   /// Every pause word is styled either way — its colour is the toggle, not its
   /// existence. The ranges were computed once at decode, so turning colouring on
@@ -847,6 +965,10 @@ private struct LineText: View {
             : DesignTokens.lineSpacing(for: size, fontName: Fonts.gurmukhi)
         )
         .multilineTextAlignment(isTitle ? .center : .leading)
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(BaniReaderView.space)).roundedToPoints } action: {
+          if let gurmukhiFrame { gurmukhiFrame.frames.frames[gurmukhiFrame.key] = $0 }
+        }
+        .onDisappear { if let gurmukhiFrame { gurmukhiFrame.frames.frames[gurmukhiFrame.key] = nil } }
 
       // A Variorum field beneath the Gurmukhi, sized by Ratio. Devanagari needs the
       // Gurmukhi face for its own conjuncts; Latin does not, so it takes the system

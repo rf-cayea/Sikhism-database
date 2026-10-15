@@ -254,30 +254,60 @@ height**, because `scrollTo(_:anchor:)` aligns a row's own anchor with the viewp
 and cannot express "40% into this row at 25% down the screen". Exact positioning
 needs iOS 18's `ScrollPosition` with offsets — available at this app's deployment
 target (26.0, [interaction.md](../../docs/interaction.md#platform-targets)) but not
-yet used.
+yet used. Proposed: after release, read the anchor row's frame and
+`ScrollPosition.scrollTo(y:)` the offset that puts its focal point back under the
+fingers.
 
-**Known bug: rotation moves the reader upwards (seen on iPhone, 2026-10-15).** The
-bani stays open and settings are kept; only the scroll position moves. Observed:
+**A rotation keeps the line being read at the top.** That line is the first row
+with at least 40% of its Gurmukhi showing below the bar. Only the Gurmukhi counts,
+because transliterations make rows longer or shorter. The reader records it on
+every scroll while the width is unchanged, and after a width change puts it back
+with `scrollTo(_:anchor: .top)`, the call a tap uses (`holdOrRestore` and `topLine`
+in `BaniReaderView.swift`). It lands with its row's top just below the bar, so a
+part-way offset is not kept.
 
-- Scrolled to an arbitrary spot, a rotation either way jumps upwards.
-- A line tapped in portrait stays at the top through a rotation to landscape and
+- **Why by hand.** Left alone, a rotation kept whatever SwiftUI anchored to, and
+  rows above it that were never measured at the new width were placed by
+  estimated height, so the reader jumped upwards: the same source of error as the
+  pinch jitter above. A `ScrollPosition` binding is not used: it picks its own top
+  row, and on a rotation it left the reader shifted 16pt sideways.
+- **"Below the bar" is 0 in the rows' coordinates.** Measured on an iPhone: the
+  row just below the bar reads a top edge of 0 in portrait and landscape.
+  `contentInsets.top` and `safeAreaInsets.top` report the bar's height (113 / 78)
+  and must not be subtracted; with either, every rotation moved the reader down
+  one line. If it drifts by a line per rotation again, check this first.
+
+**Verified on an iPhone (2026-10-15).** The test is the observations that showed
+the jump. Each must keep the line in place from the first rotation on, in a long
+bani with a continuation expanded, at the default size and at a large pinched
+size, with and without pronunciations:
+
+- Scrolled to an arbitrary spot, a rotation either way used to jump upwards.
+- A line tapped in portrait stayed at the top through a rotation to landscape and
   back again.
-- A line tapped in landscape moves upwards on the rotation to portrait. That
-  includes a line tapped in landscape after a portrait tap that rotated correctly.
-- After that first jump, at least ten further rotations return to the same line in
-  each orientation, with no further drift.
+- A line tapped in landscape moved upwards on the rotation to portrait, including
+  after a portrait tap that rotated correctly.
+- After that first jump, ten or more rotations returned to the same line with no
+  further drift. A fix that only holds from the second rotation on has not fixed
+  it.
 
-The reader is a `ScrollView` + `LazyVStack` with no `scrollPosition` binding, so a
-rotation keeps whatever SwiftUI anchors to, and rows above that were never measured
-at the new width are placed by estimated height. That is the same source of error
-as the pinch jitter above. Why landscape-to-portrait fails and portrait-to-landscape
-does not after a tap is not yet understood. **The likely fix is to own the
-position**: bind `scrollPosition` to the top row's id, or record the top row and put
-it back after a width change, the way the pinch puts its anchor back. Either way it
-is checked by repeating the observations above. Android restores the top row by key
-after a rotation and, in the same test on a phone, does not drift, whether the
-line was tapped or scrolled to
-([android/README.md](../android/README.md#reader-state-across-recreation)).
+**Known bug: after a tap, scrolling snaps the tapped line back to the top once
+(seen on iPhone, 2026-10-15).** Present at `48bf2c57b3`, before the rotation fix
+above, so it comes from tap-to-scroll, not from that fix. Observed:
+
+- Tap a line, wait for the highlight to fade, then scroll slowly either way. At
+  some point the tapped line jumps back to where the tap put it, once; scrolling
+  is normal after that. It happens again after every tap, in either orientation.
+- Scrolling while the tap's scroll animation is still running does not cause it.
+  Scrolling without having tapped never causes it.
+- Where it happens varies by line and direction, with no rule found yet. Going
+  down it is often about halfway through the whole row (transliterations
+  included), going up often almost at once; but in Jap Ji Sahib, the line after
+  "Jap" jumps going up and never going down.
+
+Not yet understood. One reading, unproven: the scroll view keeps the tap's
+`scrollTo` target and snaps back to it when rows coming into view are measured and
+the content height changes.
 
 Reader font size, pauses, pronunciations and ratio are persisted on both
 platforms, under the same keys ([apps/README.md](../README.md#state-of-play)).

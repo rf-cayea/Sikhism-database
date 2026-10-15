@@ -200,6 +200,8 @@ Pauses, pronunciations and ratio are persisted on both too, under the same keys
 Android has no Ratio control yet, so it only reads that one. Android also keeps the
 open bani and the scroll position across rotation, theme and font size changes,
 and process death ([android/README.md](android/README.md#reader-state-across-recreation)).
+iOS keeps the line being read at the top through a rotation (verified on an iPhone
+2026-10-15; [ios/README.md](ios/README.md#state-of-play)).
 
 Known limitation: iOS focal zoom is accurate to within **one line height**, because
 `scrollTo(_:anchor:)` aligns a row's own anchor with the viewport's and cannot
