@@ -166,6 +166,14 @@ data class Bani(
 }
 
 /**
+ * The bani a saved id names, or null when the corpus no longer has it. The open bani
+ * is saved by id across activity recreation (see `App` in MainActivity.kt); null shows
+ * the bani list rather than crashing. Unreachable while the corpus is bundled — an
+ * app update discards saved state — but not once the corpus updates on its own.
+ */
+fun List<Bani>.withId(id: String?): Bani? = id?.let { wanted -> firstOrNull { it.id == wanted } }
+
+/**
  * A bani flattened into one addressable sequence.
  *
  * The reader needs stable, unique ids per row so the scroll position can be

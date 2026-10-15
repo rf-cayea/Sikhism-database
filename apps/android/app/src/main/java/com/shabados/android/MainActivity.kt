@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.Font
@@ -42,13 +43,16 @@ private fun App() {
   val assets = LocalContext.current.assets
   val banis = remember { Corpus.load(assets) }
   val gurmukhi = remember { santLipi(assets) }
-  var open by remember { mutableStateOf<Bani?>(null) }
+  // Saveable, so rotation, a theme or font size change, and process death (all of
+  // which recreate the activity) leave the reader open. By id: a Bani is not
+  // Parcelable, and the id is stable across corpus versions.
+  var openId by rememberSaveable { mutableStateOf<String?>(null) }
 
-  val current = open
+  val current = banis.withId(openId)
   if (current == null) {
-    BaniList(banis, gurmukhi) { open = it }
+    BaniList(banis, gurmukhi) { openId = it.id }
   } else {
-    BackHandler { open = null }
-    BaniReader(current) { open = null }
+    BackHandler { openId = null }
+    BaniReader(current) { openId = null }
   }
 }

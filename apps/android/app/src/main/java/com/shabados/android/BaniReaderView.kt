@@ -45,6 +45,8 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -467,6 +469,10 @@ private fun ContinuationCard(
   }
 }
 
+/** Saves a set of ids as a list. Explicit, rather than relying on the set being
+ * `Serializable`, which depends on which Set implementation is behind it. */
+private val StringSetSaver = listSaver<Set<String>, String>(save = { it.toList() }, restore = { it.toSet() })
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BaniReader(bani: Bani, onBack: () -> Unit) {
@@ -487,10 +493,14 @@ fun BaniReader(bani: Bani, onBack: () -> Unit) {
   var livePinchSize by remember { mutableStateOf<Float?>(null) }
   val readerSize = livePinchSize ?: ReaderSize.displaySize(savedSize, isTablet)
 
-  var pauses by remember { mutableStateOf(true) }
-  var pronDevanagari by remember { mutableStateOf(false) }
-  var pronLatin by remember { mutableStateOf(false) }
-  var ratio by remember { mutableFloatStateOf(DesignTokens.RATIO_DEFAULT) }
+  // Saveable, not remember: rotation, a theme or font size change, and process death
+  // recreate the activity, and the reader must come back as the person left it. Not
+  // persisted across launches as iOS does (apps/README.md#state-of-play). Saved state
+  // ends when the reader closes, so each bani still opens with these defaults.
+  var pauses by rememberSaveable { mutableStateOf(true) }
+  var pronDevanagari by rememberSaveable { mutableStateOf(false) }
+  var pronLatin by rememberSaveable { mutableStateOf(false) }
+  var ratio by rememberSaveable { mutableFloatStateOf(DesignTokens.RATIO_DEFAULT) }
   val schemes = remember(pronDevanagari, pronLatin) {
     buildList {
       if (pronDevanagari) add(Pronunciation.DEVANAGARI)
@@ -498,10 +508,15 @@ fun BaniReader(bani: Bani, onBack: () -> Unit) {
     }
   }
 
-  var expandedContinuations by remember { mutableStateOf(setOf<String>()) }
+  // Saveable, and restored in the same first composition as `listState` below, so the
+  // saved scroll index points into the list with these continuations already
+  // expanded. Restoring it any later would land the scroll on the wrong row.
+  var expandedContinuations by rememberSaveable(stateSaver = StringSetSaver) { mutableStateOf(setOf<String>()) }
   val rawItems = remember(bani.id) { bani.items() }
   val items = remember(rawItems, expandedContinuations) { expand(rawItems, expandedContinuations) }
 
+  // Saves the first visible row's index and offset, and its key, which the list uses
+  // to find that row again. Keys are ReaderItem.id, stable for a given bani.
   val listState = rememberLazyListState()
   val scope = rememberCoroutineScope()
 

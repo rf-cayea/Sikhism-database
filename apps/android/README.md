@@ -197,7 +197,44 @@ cd apps/android && ./gradlew :app:testDebugUnitTest
 
 JVM unit tests only, JUnit 4 (test-only dependency). No instrumented tests:
 SharedPreferences round-tripping across a restart is checked by hand, not by a
-test.
+test. The same goes for [reader state across recreation](#reader-state-across-recreation).
+
+## Reader state across recreation
+
+Rotation, a theme change, a system Font size change and process death all destroy
+and recreate `MainActivity`. **What the person had open comes back**: the open bani,
+the scroll position, pauses, pronunciations, ratio and expanded continuations. Font
+size is already persisted (see [Reader size and pinch](#reader-size-and-pinch)).
+
+- **`rememberSaveable`, not `android:configChanges`.** `configChanges` only covers
+  the changes it lists, so process death would still lose state. It also leaves the
+  app to handle each listed change itself, including the tablet and size logic,
+  which reads `resources.configuration`.
+- **The open bani is saved by id** (`App` in `MainActivity.kt`) and looked up with
+  `List<Bani>.withId`. An id the corpus no longer has shows the list.
+  `OpenBaniTest` covers the lookup. **A stopgap, for as long as the bani list is
+  the home screen.** Once the viewer is what the app opens to and journeys keep
+  the open tabs ([reading-shell.md](../../docs/requirements/reading-shell.md#four-surfaces-one-of-them-always-visible)),
+  the open item comes back from the journey, and this saved id goes with the list.
+  The scroll position does not: journeys record the line tapped, not how far the
+  reader scrolled, so the saved list state below stays.
+- **Scroll restores through `rememberLazyListState`**, which needs two things. The
+  rows must have stable keys (`ReaderItem.id`), and the expanded continuations must
+  be restored in the same first composition, so the saved index points into the
+  expanded list. After a rotation, the same row is at the top. Its offset within
+  that row is pixels, so it can shift when lines rewrap at the new width.
+- **Transient state stays plain `remember`**: the pinch anchor and its highlight,
+  the live pinch size, and whether the Controls menu is open.
+- **Recreation only, not launches.** The settings reset when the reader closes, and
+  a cold launch opens the list. Persisting the settings across launches the way iOS
+  does is a separate, unmade change. Whether a cold launch resumes the last bani
+  belongs to the journeys work (docs/requirements/journeys.md), not here.
+- **No Compose UI test.** `StateRestorationTester` needs
+  `androidx.compose.ui:ui-test-junit4` plus instrumented or Robolectric tests, which
+  is a dependency decision that has not been made. Checked by hand instead: with the
+  reader scrolled partway, pauses toggled and a continuation expanded, (1) rotate
+  both ways, (2) toggle dark theme, (3) change Font size, (4) with Developer options
+  > "Don't keep activities" on, switch away and back.
 
 ## Content
 
