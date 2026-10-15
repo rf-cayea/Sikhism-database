@@ -12,11 +12,10 @@ only on wide surfaces; everything else appears everywhere.
 
 **Controls persist across compositions and across launches.** Someone who set a
 comfortable size for Japji Sahib must not have to set it again for the next shabad,
-or tomorrow. This is a settled expectation from v2 and from the web app, and it is
-also the one thing the mobile scaffolds currently disagree on: **iOS persists reader
-font size and Android does not**
-([apps/README.md](../../apps/README.md#state-of-play)). Persisting on both is the
-resolution.
+or tomorrow. This is a settled expectation from v2 and from the web app. **Both
+mobile apps persist reader font size** (Android since 2026-10-14). iOS also persists
+pauses, pronunciations and ratio; **Android does not yet**
+([apps/README.md](../../apps/README.md#state-of-play)).
 
 **Controls are per-device**, matching the display config in
 [ADR-0002](../architecture/decisions/0002-view-modes-and-overlay-endpoints.md).
@@ -48,19 +47,24 @@ into the apps. They are not to be restated in platform code, or here.
 someone has already set up their device the way they like to read, and starts the
 reader from there.
 
-- **On a phone, it follows the system Text Size setting.** It is a fixed multiple of
-  the size the system gives body text at that setting, rounded to the nearest even
-  number. The factor, and a table of what it gives at every setting, are in
-  [`tokens.md`](../../packages/design/tokens.md#starting-size). The default setting
-  starts at `defaultSize`, and larger settings start proportionally larger.
-- **On iPad, it is one fixed size, whatever the setting**, in both orientations.
+- **On a phone, it follows the system Text Size setting** (Font size on Android). It
+  is a fixed multiple of the size the system gives body text at that setting,
+  rounded to the nearest even number. The factor, and a table of what it gives at
+  every setting, are in [`tokens.md`](../../packages/design/tokens.md#starting-size);
+  Android, which has no Body style, measures body text as 17sp at the person's Font
+  size ([tokens.md](../../packages/design/tokens.md#starting-size-on-android)). The
+  default setting starts at `defaultSize`, and larger settings start proportionally
+  larger.
+- **On iPad or an Android tablet, it is one fixed size, whatever the setting**, in
+  both orientations. An Android tablet is a device whose smallest screen width is at
+  least 600dp.
 - **It is saved, then never recomputed.** Changing the system setting afterwards
   does not move the reader. A size someone sets by pinch or A± always wins (see
   [Persistence](#persistence)).
 
-Applies to iOS. Android has the equivalent setting (font scale) but does not yet
-save the size, and today scales every size by it rather than only the first. Both
-are to change to this rule.
+Applies to iOS and Android. **The system setting picks only this first size**: the
+saved size is drawn as-is afterwards, so a larger system setting does not multiply
+the reader's size a second time.
 
 The web app's defaults are separate and not yet decided. The expectation is UI text
 around 14–18px and reader Gurbani around 23–30px. See [Open questions](#open-questions).

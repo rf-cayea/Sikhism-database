@@ -121,7 +121,9 @@ a scroll alone does not tell you which line you hit. Compose gives every `clicka
 ripple, which answers it; SwiftUI's plain tap gestures give nothing, so iOS flashes the
 toner behind the line and fades it out. Neither app suppresses the other's mechanism to
 match. The requirement is that the tap is acknowledged where the finger landed, not that
-it is acknowledged the same way.
+it is acknowledged the same way. **A pinch is different and is marked the same on
+both**: it has no ripple, so the row a pinch is anchored to gets the toner wash on
+Android too, held through the pinch and faded after release.
 
 **A continuation card is content, not a control, and that constrains its feedback.** The
 card offering the longer reading

@@ -26,6 +26,10 @@ private fun santLipi(assets: AssetManager) =
 class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+    // Before any UI, so the reader only ever reads a saved size
+    // (docs/requirements/display-controls.md#starting-size). Does nothing once a
+    // size is saved.
+    ReaderSize.saveStartingSizeOnce(readerSizeStore(), resources.configuration.isTablet) { resources.bodyDp() }
     enableEdgeToEdge()
     setContent {
       ShabadOSTheme(dark = isSystemInDarkTheme()) { App() }

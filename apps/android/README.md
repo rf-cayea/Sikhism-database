@@ -51,7 +51,10 @@ specifics:
    are unsigned.
 2. **Bump `versionCode`** on every upload. Play rejects any code it has already
    seen; the legacy app's highest was 86 (`0.2.0`), so this app starts at 87
-   (`0.3.0`).
+   (`0.3.0`). **As of 2026-10-14 nothing with 87 has been uploaded** — Play
+   Console's bundle list ends at 86, and Production still holds a draft of 73. A
+   bundle 87 built 2026-10-10 from `0f3844403c` was never uploaded and is
+   superseded: rebuild from the commit being released rather than uploading it.
 3. **A proper adaptive-icon foreground.** The current one insets the square 1024px
    icon into the safe zone over an approximated gradient, which works but has a
    faint seam. The right fix is a transparent-background lotus exported from
@@ -109,6 +112,66 @@ works from a date it states.
   Needs discussion; see [`apps/README.md`](../README.md#what-is-shared-and-how)).
 - **ProGuard/R8 shrinking.** There is nothing to shrink, and an unverified
   ProGuard config is how you ship a release build that crashes where debug does not.
+
+## Reader size and pinch
+
+Ported from iOS 2026-10-14
+([display-controls.md](../../docs/requirements/display-controls.md#zoom)). The
+rules are in `ReaderSize.kt`, which has no Android types, so `src/test` can pin them
+on the JVM. `BaniReaderView.kt` only measures and draws.
+
+- **Sizes are dp, drawn as-is.** Reading text is rendered with the font scale
+  removed (`ReaderText`), so `.sp` equals dp. Android's font scale picks only
+  the starting size, once, at first launch (`MainActivity`, via
+  `ReaderSize.saveStartingSizeOnce`). The toolbar and the Expand button are outside
+  that wrapper and still follow the system setting.
+- **Saved in SharedPreferences** (`ReaderPreferences.kt`), not DataStore, which
+  would be a dependency for one float. The reader draws the saved size clamped to
+  the device's range without rewriting it.
+- **Tablet means `smallestScreenWidthDp >= 600`**, and gets the iPad maximum and
+  starting size. Smallest width, so rotation and split screen do not change it.
+- **The pinch moves in 1/6dp steps**, iOS's grid, about half a device pixel.
+  Whole pixels (0.38dp) felt stepped on a Pixel (2026-10-14): a size step moves
+  every glyph along the line in proportion, so a line's end jumps by far more than
+  the step. 1/24 felt no smoother than 1/6 (2026-10-15) and costs four times the
+  relayouts.
+- **Reading text uses `TextMotion.Animated`** (`ReaderText`), so glyphs sit at their
+  exact scaled positions. The default, `Static`, rounds them to whole pixels, which
+  makes a pinch move text in jumps however fine the step. Always on, not only during
+  a pinch, because switching on release could move line breaks under the anchor.
+- **No scroll correction during the pinch; one on release.** Unlike iOS's, the
+  release is exact: the point of the row that was under the fingers returns to the
+  same height, because Compose reports each row's measured offset.
+- **The pinch owns the gesture once a second finger lands.** It reads pointer
+  events in the Initial pass and consumes them until every finger lifts. Otherwise
+  the list scrolls under the pinch, and lifting the fingers counts as a tap on the
+  row (seen on device 2026-10-14).
+- **Taps keep the ripple; only the pinch anchor gets the toner wash**
+  ([interaction.md](../../docs/interaction.md)).
+- **One node per row carries every background** (`ReaderRow`): the card fill, the
+  anchor's toner and the ripple, all clipped to one 12dp rounded shape. iOS draws its
+  highlight bled outside the row, and doing that here left the ripple on the row's
+  own square bounds, a different size and shape from the toner. So the text is inset
+  instead: the list's side padding is 8dp short of the gutter and each row adds it
+  back. Vertically a row reaches 6dp past its text (the gap it already owns) rather
+  than iOS's 8, because two rows' tap targets cannot overlap.
+- **The Keep Reading card's gradient reaches `toner` where the preview's veil ends**,
+  and is solid below. Run on to the card's bottom edge, as on iOS, the veil's bottom
+  showed as a faint rectangle inside the card.
+
+**Not yet verified on a device.** The 17sp-in-dp column of
+[tokens.md's Android table](../../packages/design/tokens.md#starting-size-on-android)
+is interpolated from AOSP's font-scale tables, not measured.
+
+## Tests
+
+```
+cd apps/android && ./gradlew :app:testDebugUnitTest
+```
+
+JVM unit tests only, JUnit 4 (test-only dependency). No instrumented tests:
+SharedPreferences round-tripping across a restart is checked by hand, not by a
+test.
 
 ## Content
 

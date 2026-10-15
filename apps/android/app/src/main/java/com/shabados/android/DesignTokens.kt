@@ -51,8 +51,11 @@ object DesignTokens {
   const val DEFAULT_SIZE = 28f
   const val LIST_SIZE = 20f
   const val MIN_SIZE = 16f
-  /** Phone maximum; Android does not yet distinguish tablets. */
-  const val MAX_SIZE = 88f
+  const val PHONE_MAX_SIZE = 88f
+  const val PAD_MAX_SIZE = 132f
+
+  /** The zoom maximum for the device: a tablet fits larger text. */
+  fun maxSize(isTablet: Boolean) = if (isTablet) PAD_MAX_SIZE else PHONE_MAX_SIZE
 
   /**
    * Total line box as a multiple of font size, so it holds when zoomed. Gurmukhi
@@ -61,5 +64,25 @@ object DesignTokens {
    */
   const val LINE_HEIGHT_RATIO = 1.6f
 
-  fun clamp(size: Float) = size.coerceIn(MIN_SIZE, MAX_SIZE)
+  fun clamp(size: Float, isTablet: Boolean) = size.coerceIn(MIN_SIZE, maxSize(isTablet))
+
+  const val STARTING_SIZE_FACTOR = 1.65
+  const val PAD_STARTING_SIZE = 40f
+  /** Android has no Body text style; this many sp stands in for it. */
+  const val ANDROID_BODY_SIZE = 17f
+
+  /**
+   * The reader's size on first launch
+   * (docs/requirements/display-controls.md#starting-size): on a phone,
+   * [STARTING_SIZE_FACTOR] × [bodyDp] — the dp Android gives [ANDROID_BODY_SIZE] sp at
+   * the person's Font size — to the nearest even number, within the zoom range; on a
+   * tablet, a fixed size. Same arithmetic as `startingSizeFor` in
+   * generate-tokens.mjs, which checks the table in tokens.md against it. In Double,
+   * as the generator computes, so the two agree on ties.
+   */
+  fun startingSize(isTablet: Boolean, bodyDp: Float): Float {
+    if (isTablet) return PAD_STARTING_SIZE
+    val even = 2 * Math.round(bodyDp * STARTING_SIZE_FACTOR / 2)
+    return clamp(even.toFloat(), isTablet = false)
+  }
 }

@@ -1,6 +1,10 @@
 package com.shabados.android
 
 import android.content.res.AssetManager
+import androidx.compose.animation.core.EaseOut
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -18,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 // matchParentSize needs no import -- it's a member of BoxScope, not a top-level
 // function, and resolves automatically inside a Box{} content lambda.
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -26,29 +31,34 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.withStyle
@@ -58,8 +68,13 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextMotion
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -88,6 +103,47 @@ private fun gurmukhiFont(assets: AssetManager, weight: Int): FontFamily =
 private fun tonerColor(): Color =
   lerp(MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.onBackground, DesignTokens.TONER_OPACITY)
 
+/** The same wash, lighter: the top of the Keep Reading card's gradient. */
+@Composable
+private fun tonerFaintColor(): Color =
+  lerp(MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.onBackground, DesignTokens.TONER_FAINT_OPACITY)
+
+/** The vertical gap between reader rows, as padding inside each row's own bounds.
+ * Named because the pinch anchor discounts it: a pinch in that padding is a pinch
+ * between rows. */
+private val RowSpacing = 6.dp
+
+/** How long a pinch's anchor highlight stays fully on after the fingers lift, then
+ * how long it takes to fade. iOS's `tapHighlightHoldDuration` and
+ * `tapHighlightFadeOutDuration`, so the two platforms fade alike. */
+private const val HIGHLIGHT_HOLD_MS = 500L
+private const val HIGHLIGHT_FADE_MS = 250
+
+/**
+ * How reading text is drawn. Two things, both because the reader's size is its own:
+ *
+ * - **The system font scale is removed.** The reader's sizes are dp: the font scale
+ *   chose the starting size once (see [ReaderSize]) and must not multiply every size
+ *   again on top of it. With a font scale of 1, `.sp` is exactly dp.
+ * - **[TextMotion.Animated]**: glyphs laid out and drawn at their exact scaled size
+ *   and position. The default, `Static`, rounds glyph positions and advances to whole
+ *   pixels, so a pinch moves text in visible jumps rather than continuously. Always on,
+ *   not just during a pinch: switching on release could move line breaks, and with
+ *   them the row the pinch just put back.
+ *
+ * Only reading text goes inside this; the toolbar and the Expand button keep following
+ * the system setting like the rest of the platform's UI.
+ */
+@Composable
+private fun ReaderText(content: @Composable () -> Unit) {
+  val density = LocalDensity.current
+  CompositionLocalProvider(
+    LocalDensity provides Density(density.density, fontScale = 1f),
+    LocalTextStyle provides LocalTextStyle.current.copy(textMotion = TextMotion.Animated),
+    content = content,
+  )
+}
+
 private fun vishraamColor(weight: Vishraam, dark: Boolean): Color =
   when (weight) {
     Vishraam.HEAVY -> if (dark) DesignTokens.vishraamHeavyDark else DesignTokens.vishraamHeavyLight
@@ -95,22 +151,42 @@ private fun vishraamColor(weight: Vishraam, dark: Boolean): Color =
     Vishraam.LIGHT -> if (dark) DesignTokens.vishraamLightDark else DesignTokens.vishraamLightLight
   }
 
-/** The reader's one "card" treatment: a rounded rect filled with [color], drawn
- * bled outward by [bleed] on every side. `drawBehind` isn't clipped to this
- * composable's own layout bounds by default, so — unlike a plain
- * `Modifier.background()` — the fill can extend past them without the content
- * itself repositioning to make room for it, the same property the iOS version's
- * negative-padding trick relies on. */
-private fun Modifier.readerCardBackground(color: Color, bleed: androidx.compose.ui.unit.Dp = 8.dp, cornerRadius: androidx.compose.ui.unit.Dp = 12.dp) =
-  this.drawBehind {
-    val bleedPx = bleed.toPx()
-    drawRoundRect(
-      color = color,
-      topLeft = Offset(-bleedPx, -bleedPx),
-      size = androidx.compose.ui.geometry.Size(size.width + bleedPx * 2, size.height + bleedPx * 2),
-      cornerRadius = androidx.compose.ui.geometry.CornerRadius(cornerRadius.toPx()),
-    )
-  }
+/** The reader's one card shape: the pinch anchor's toner, the tap ripple and the
+ * Keep Reading card are all clipped to it, on the same bounds. */
+private object ReaderCard {
+  /** How far a card extends past the text on each side: half the reader's 16dp
+   * gutter, as on iOS. Vertically a row extends by [RowSpacing] instead, the gap
+   * it already owns, because two rows' tap targets cannot overlap. */
+  val bleed = 8.dp
+  val shape = RoundedCornerShape(12.dp)
+}
+
+/**
+ * One reader row. **Everything drawn behind or over the text — the Keep Reading
+ * card's fill ([background]), the pinch anchor's toner ([highlight]), the tap
+ * ripple — is on this one node, clipped to [ReaderCard.shape]**, so none of them can
+ * differ in size or corner radius. They did when the toner was drawn bled outside
+ * the row (iOS's negative-padding approach) while the ripple stayed on the row's
+ * own, unrounded bounds. The text is inset instead: the list's side padding is
+ * [ReaderCard.bleed] short of the gutter and [content] adds it back.
+ */
+@Composable
+private fun ReaderRow(
+  highlight: Float,
+  onTap: () -> Unit,
+  background: Modifier = Modifier,
+  content: @Composable () -> Unit,
+) {
+  Box(
+    modifier = Modifier
+      .fillMaxWidth()
+      .clip(ReaderCard.shape)
+      .then(background)
+      .background(tonerColor().copy(alpha = highlight))
+      .clickable(onClick = onTap)
+      .padding(vertical = RowSpacing),
+  ) { content() }
+}
 
 private object Title {
   const val HEADING_SIZE_RATIO = 1.25f
@@ -261,36 +337,38 @@ private fun LineRow(
     base
   }
 
-  Column(
-    horizontalAlignment = if (isTitle) Alignment.CenterHorizontally else Alignment.Start,
-    modifier = Modifier
-      .fillMaxWidth()
-      .padding(
-        top = if (isTitle && !precededByTitle) (size * Title.SPACE_BEFORE).dp else 0.dp,
-        bottom = if (isTitle) (size * Title.SPACE_AFTER).dp else 0.dp,
-      )
-      .alpha(if (line.isColophon) COLOPHON_OPACITY else 1f),
-  ) {
-    Text(
-      text = text,
-      fontFamily = if (isTitle) fonts.title else fonts.body,
-      color = foreground,
-      fontSize = (if (isTitle) titleSize else size).sp,
-      lineHeight = ((if (isTitle) titleSize else size) * DesignTokens.LINE_HEIGHT_RATIO).sp,
-      textAlign = if (isTitle) TextAlign.Center else TextAlign.Start,
-      modifier = Modifier.fillMaxWidth(),
-    )
-    schemes.forEach { scheme ->
-      val secondary = size * ratio
+  ReaderText {
+    Column(
+      horizontalAlignment = if (isTitle) Alignment.CenterHorizontally else Alignment.Start,
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(
+          top = if (isTitle && !precededByTitle) (size * Title.SPACE_BEFORE).dp else 0.dp,
+          bottom = if (isTitle) (size * Title.SPACE_AFTER).dp else 0.dp,
+        )
+        .alpha(if (line.isColophon) COLOPHON_OPACITY else 1f),
+    ) {
       Text(
-        text = Transliteration.of(line, scheme),
-        fontFamily = if (scheme == Pronunciation.DEVANAGARI) fonts.secondary else FontFamily.Default,
-        fontWeight = if (scheme == Pronunciation.LATIN) FontWeight(DesignTokens.WEIGHT_LATIN.roundToInt()) else null,
-        fontSize = secondary.sp,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        text = text,
+        fontFamily = if (isTitle) fonts.title else fonts.body,
+        color = foreground,
+        fontSize = (if (isTitle) titleSize else size).sp,
+        lineHeight = ((if (isTitle) titleSize else size) * DesignTokens.LINE_HEIGHT_RATIO).sp,
         textAlign = if (isTitle) TextAlign.Center else TextAlign.Start,
         modifier = Modifier.fillMaxWidth(),
       )
+      schemes.forEach { scheme ->
+        val secondary = size * ratio
+        Text(
+          text = Transliteration.of(line, scheme),
+          fontFamily = if (scheme == Pronunciation.DEVANAGARI) fonts.secondary else FontFamily.Default,
+          fontWeight = if (scheme == Pronunciation.LATIN) FontWeight(DesignTokens.WEIGHT_LATIN.roundToInt()) else null,
+          fontSize = secondary.sp,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          textAlign = if (isTitle) TextAlign.Center else TextAlign.Start,
+          modifier = Modifier.fillMaxWidth(),
+        )
+      }
     }
   }
 }
@@ -302,82 +380,109 @@ private fun LineRow(
  * fires regardless of what else claims a touch, Compose's `clickable`/`Button`
  * consume their own touch sequence, so a plain nested `Button` inside a
  * `clickable` card correctly gets first claim on its own area for free.
+ *
+ * A tap gets the platform ripple, like every line row, not a toner fill:
+ * docs/interaction.md gives a continuation card the platform's ordinary pressed
+ * state and nothing more.
  */
 @Composable
 private fun ContinuationCard(
   continuation: Continuation,
   size: Float,
   fonts: GurmukhiFonts,
+  highlight: Float,
   onTapCard: () -> Unit,
   onExpand: () -> Unit,
 ) {
   val toner = tonerColor()
+  val tonerFaint = tonerFaintColor()
   val previewVisualLines = 3
   val previewLineSpacing = 4.dp
+  val previewPadding = 16.dp
 
-  Box(
-    // No `.clip()` on this Box — it would clip away `readerCardBackground`'s own
-    // bleed, which draws outside these bounds on purpose (see that modifier's own
-    // comment). The rounded shape comes from the drawn rect itself, not a clip.
-    modifier = Modifier
-      .fillMaxWidth()
-      .readerCardBackground(toner)
-      // Default ripple, deliberately not suppressed (unlike a plain line row's
-      // own clickable) — this card already has a permanent toner background,
-      // so it has no "flash toner then fade" highlight of its own to give it a
-      // tap cue; the ripple is that cue instead, and is the idiomatic Android
-      // answer to "how do I show a tap happened" generally.
-      .clickable { onTapCard() }
-      // Vertical only. A horizontal inset here would push the preview text in
-      // past where every ordinary reading line already sits (the LazyColumn's
-      // own 16dp start/end contentPadding applies to this row already) — the
-      // two need to line up, not add a second, larger indent on top.
-      .padding(vertical = 16.dp),
-    contentAlignment = Alignment.Center,
+  ReaderRow(
+    highlight = highlight,
+    onTap = onTapCard,
+    // At rest, a gradient from `tonerFaint` at the top to `toner`
+    // (packages/design/tokens.md#opacity), **reaching `toner` exactly where the
+    // preview's veil ends** and solid below it. The veil ends in `toner` too, so
+    // the two meet without an edge. A gradient running on to the card's bottom
+    // edge, as on iOS, left the veil's bottom a shade darker than the card behind
+    // it: a faint rectangle inside the card.
+    background = Modifier.drawBehind {
+      val solid = (RowSpacing + previewPadding).toPx()
+      drawRect(Brush.verticalGradient(listOf(tonerFaint, toner), startY = 0f, endY = this.size.height - solid))
+    },
   ) {
-    // No fixed `.height()` here any more — a first attempt tried to
-    // independently estimate one line's rendered height
-    // (`(size * LINE_HEIGHT_RATIO).sp.toDp()`) to budget for exactly three,
-    // and that estimate didn't actually match what `Text(lineHeight:)` renders
-    // in practice: the box came out shorter than three real lines *and* a
-    // visibly different size from the card's own bled bounds around it — which
-    // is what read as a second, inset background rather than one card. Taking
-    // exactly three real lines and letting the Column size itself to however
-    // tall they actually are removes the estimate entirely, so there's nothing
-    // left that can disagree with reality.
-    Column(
-      verticalArrangement = Arrangement.spacedBy(previewLineSpacing),
-      modifier = Modifier.fillMaxWidth(),
-    ) {
-      continuation.lines.take(previewVisualLines).forEach { line ->
-        Text(
-          text = line.gurmukhi,
-          fontFamily = fonts.body,
-          fontSize = size.sp,
-          lineHeight = (size * DesignTokens.LINE_HEIGHT_RATIO).sp,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-      }
-    }
-    // A solid-colour veil painted over the text, top to bottom, ending exactly
-    // at `toner` — not a mask of the text's own alpha, which multiplies unevenly
-    // against Gurmukhi's stacked matras. See `preview`'s own comment on iOS.
     Box(
       modifier = Modifier
-        .matchParentSize()
-        .background(Brush.verticalGradient(0f to Color.Transparent, 1f to toner)),
-    )
-    Button(onClick = onExpand) { Text("Expand") }
+        .fillMaxWidth()
+        .padding(vertical = previewPadding),
+      contentAlignment = Alignment.Center,
+    ) {
+      // No fixed `.height()` here any more — a first attempt tried to
+      // independently estimate one line's rendered height
+      // (`(size * LINE_HEIGHT_RATIO).sp.toDp()`) to budget for exactly three,
+      // and that estimate didn't actually match what `Text(lineHeight:)` renders
+      // in practice: the box came out shorter than three real lines *and* a
+      // visibly different size from the card's own bled bounds around it — which
+      // is what read as a second, inset background rather than one card. Taking
+      // exactly three real lines and letting the Column size itself to however
+      // tall they actually are removes the estimate entirely, so there's nothing
+      // left that can disagree with reality.
+      ReaderText {
+        Column(
+          verticalArrangement = Arrangement.spacedBy(previewLineSpacing),
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = ReaderCard.bleed),
+        ) {
+          continuation.lines.take(previewVisualLines).forEach { line ->
+            Text(
+              text = line.gurmukhi,
+              fontFamily = fonts.body,
+              fontSize = size.sp,
+              lineHeight = (size * DesignTokens.LINE_HEIGHT_RATIO).sp,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+          }
+        }
+      }
+      // A solid-colour veil painted over the text, top to bottom, ending exactly
+      // at `toner` — not a mask of the text's own alpha, which multiplies unevenly
+      // against Gurmukhi's stacked matras. See `preview`'s own comment on iOS.
+      // **The card's full width**, not the text's, so it has no side edges to
+      // show against the gradient behind it.
+      Box(
+        modifier = Modifier
+          .matchParentSize()
+          .background(Brush.verticalGradient(0f to Color.Transparent, 1f to toner)),
+      )
+      Button(onClick = onExpand) { Text("Expand") }
+    }
   }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BaniReader(bani: Bani, onBack: () -> Unit) {
-  val assets = LocalContext.current.assets
-  val fonts = remember(assets) { GurmukhiFonts(assets) }
-  var zoomAccumulator by remember { mutableFloatStateOf(DesignTokens.DEFAULT_SIZE) }
-  var size by remember { mutableFloatStateOf(DesignTokens.DEFAULT_SIZE) }
+  val context = LocalContext.current
+  val fonts = remember(context.assets) { GurmukhiFonts(context.assets) }
+  val isTablet = LocalConfiguration.current.isTablet
+
+  // Saved across launches (docs/requirements/display-controls.md#persistence). The
+  // starting size was written before any UI, in MainActivity, so the default here
+  // is only a fallback for a store that cannot be read.
+  val sizeStore = remember(context) { context.readerSizeStore() }
+  var savedSize by remember { mutableFloatStateOf(sizeStore.get() ?: DesignTokens.DEFAULT_SIZE) }
+  fun saveSize(value: Float) {
+    savedSize = value
+    sizeStore.set(value)
+  }
+  /** The size during a pinch, saved only when the fingers lift. */
+  var livePinchSize by remember { mutableStateOf<Float?>(null) }
+  val readerSize = livePinchSize ?: ReaderSize.displaySize(savedSize, isTablet)
+
   var pauses by remember { mutableStateOf(true) }
   var pronDevanagari by remember { mutableStateOf(false) }
   var pronLatin by remember { mutableStateOf(false) }
@@ -407,50 +512,65 @@ fun BaniReader(bani: Bani, onBack: () -> Unit) {
     scope.launch { listState.animateScrollToItem(index) }
   }
 
-  // The row under the fingers when a pinch begins, plus where within that row and
-  // where on screen. LazyColumn holds the *top* item across a size change, so
-  // without this the page slides away as type grows.
-  var anchorIndex by remember { mutableIntStateOf(-1) }
-  var anchorFraction by remember { mutableFloatStateOf(0f) }
-  var anchorScreenY by remember { mutableFloatStateOf(0f) }
+  /** The row a pinch is anchored to, by item key, drawn with a toner wash. A pinch
+   * has no ripple to show where it is anchored, so unlike a tap it gets the wash. */
+  var highlightedKey by remember { mutableStateOf<Any?>(null) }
+  /** Restores the anchor and then fades it; cancelled by the next pinch. */
+  var anchorJob by remember { mutableStateOf<Job?>(null) }
 
-  fun captureAnchor(focalY: Float) {
+  /** Each visible row's extent, without the [RowSpacing] padding inside it, so a
+   * pinch in that padding counts as between rows. Pixels from the reader's top, the
+   * same space the pointer reports in. */
+  fun visibleRows(spacingPx: Float): List<Pinch.Row> {
     val info = listState.layoutInfo
-    val hit = info.visibleItemsInfo.firstOrNull {
-      val top = it.offset - info.viewportStartOffset
-      focalY >= top && focalY <= top + it.size
+    return info.visibleItemsInfo.map {
+      val top = (it.offset - info.viewportStartOffset).toFloat()
+      Pinch.Row(it.key, it.index, top + spacingPx, top + it.size - spacingPx)
     }
-    if (hit == null) {
-      anchorIndex = listState.firstVisibleItemIndex
-      anchorFraction = 0f
-    } else {
-      anchorIndex = hit.index
-      val top = hit.offset - info.viewportStartOffset
-      anchorFraction = if (hit.size > 0) (focalY - top) / hit.size else 0f
-    }
-    anchorScreenY = focalY
   }
 
-  fun restoreAnchor(scale: Float) {
-    if (anchorIndex < 0) return
-    scope.launch {
+  /**
+   * Once the pinch ends: the point of the anchor row that was under the fingers goes
+   * back to where the fingers went down, then the highlight fades.
+   *
+   * **Once, on release — never during the pinch.** On iOS the position was corrected
+   * on every step, and at large sizes the reader jittered badly: each step re-wrapped
+   * lines and the lazy list re-estimated rows off screen, so each correction was
+   * computed from guesses (apps/ios/README.md#state-of-play). Android corrected every
+   * step too, with the same exposure. During the pinch the list holds its top row,
+   * as it does for any size change.
+   *
+   * Exact, not within a line as on iOS: Compose reports each row's measured offset
+   * once laid out.
+   */
+  fun restoreAnchor(row: Pinch.Row, y: Float, fraction: Float, spacingPx: Float) {
+    anchorJob = scope.launch {
+      // Two frames: the saved size recomposes the rows in one and is laid out by the
+      // next, so the row is measured at its final size before it is placed.
+      withFrameNanos {}
+      withFrameNanos {}
+      listState.scrollToItem(row.index)
       val info = listState.layoutInfo
-      val measured = info.visibleItemsInfo.firstOrNull { it.index == anchorIndex }?.size ?: 0
-      val newHeight = measured * scale
-      val targetTop = anchorScreenY - anchorFraction * newHeight
-      listState.scrollToItem(anchorIndex, 0)
-      listState.scrollBy(-targetTop)
+      info.visibleItemsInfo.firstOrNull { it.index == row.index }?.let {
+        val top = (it.offset - info.viewportStartOffset) + spacingPx
+        listState.scrollBy(Pinch.correction(top, it.size - 2 * spacingPx, fraction, y))
+      }
+      delay(HIGHLIGHT_HOLD_MS)
+      if (highlightedKey == row.key) highlightedKey = null
     }
   }
 
   Scaffold(
     topBar = {
       TopAppBar(
-        title = { Text(bani.latin) },
+        // One line, ellipsised. At the largest Font size and Display size the
+        // actions leave the title a few characters' width, and wrapping broke it
+        // into a column of syllables that pushed the reader down the screen.
+        title = { Text(bani.latin, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
         actions = {
-          TextButton(onClick = { size = DesignTokens.clamp(size - 2f) }) { Text("A-") }
-          TextButton(onClick = { size = DesignTokens.clamp(size + 2f) }) { Text("A+") }
+          TextButton(onClick = { saveSize(DesignTokens.clamp(readerSize - 2f, isTablet)) }) { Text("A-") }
+          TextButton(onClick = { saveSize(DesignTokens.clamp(readerSize + 2f, isTablet)) }) { Text("A+") }
           var menuOpen by remember { mutableStateOf(false) }
           TextButton(onClick = { menuOpen = true }) { Text("⋯") }
           DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
@@ -478,59 +598,78 @@ fun BaniReader(bani: Bani, onBack: () -> Unit) {
       state = listState,
       modifier = Modifier
         .fillMaxSize()
-        .pointerInput(Unit) {
+        .pointerInput(isTablet) {
+          val spacingPx = RowSpacing.toPx()
+          // **The Initial pass, and every event consumed once a second finger is
+          // down**, so the pinch owns the gesture. In the Main pass the list and the
+          // rows see each event first: the list can scroll with the fingers
+          // mid-pinch, and lifting them counted as a tap on the row (seen on device
+          // 2026-10-14) — a ripple beside the anchor's toner, and a scroll to the
+          // top competing with the anchor's restore. The first finger's down is not
+          // consumed, so a one-finger scroll or tap is untouched.
           awaitEachGesture {
-            awaitFirstDown(requireUnconsumed = false)
-            var zooming = false
+            awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            // Set when a second finger lands; null means this gesture is not a pinch.
+            var baseline: Float? = null
+            // Cumulative since the pinch began, so the size cannot compound.
+            var magnification = 1f
+            var anchor: Pinch.Row? = null
+            var focalY = 0f
+            var fraction = 0f
             do {
-              val event = awaitPointerEvent()
-              if (event.changes.count { it.pressed } >= 2) {
-                if (!zooming) {
-                  captureAnchor(event.calculateCentroid(useCurrent = true).y)
-                  zoomAccumulator = size
-                  zooming = true
-                }
+              val event = awaitPointerEvent(PointerEventPass.Initial)
+              if (baseline == null && event.changes.count { it.pressed } >= 2) {
+                // From the size on screen, within range, not the saved value.
+                baseline = ReaderSize.displaySize(savedSize, isTablet)
+                focalY = event.calculateCentroid(useCurrent = true).y
+                anchor = Pinch.anchor(focalY, visibleRows(spacingPx), size.height.toFloat())
+                fraction = anchor?.let { Pinch.fraction(focalY, it) } ?: 0f
+                anchorJob?.cancel()
+                highlightedKey = anchor?.key
+              }
+              if (baseline != null) {
+                // Until every finger lifts, including the ups, so none ends as a tap.
+                event.changes.forEach { it.consume() }
                 val zoom = event.calculateZoom()
                 if (zoom != 1f) {
-                  zoomAccumulator = DesignTokens.clamp(zoomAccumulator * zoom)
-                  val stepped = zoomAccumulator.roundToInt().toFloat()
-                  if (stepped != size) {
-                    val scale = stepped / size
-                    size = stepped
-                    restoreAnchor(scale)
-                  }
-                  event.changes.forEach { it.consume() }
+                  magnification *= zoom
+                  val next = Pinch.size(baseline, magnification, isTablet)
+                  if (next != livePinchSize) livePinchSize = next
                 }
               }
             } while (event.changes.any { it.pressed })
-            anchorIndex = -1
+            if (baseline != null) {
+              livePinchSize?.let(::saveSize)
+              livePinchSize = null
+              anchor?.let { restoreAnchor(it, focalY, fraction, spacingPx) }
+            }
           }
         },
       contentPadding = PaddingValues(
         top = inset.calculateTopPadding(),
         bottom = inset.calculateBottomPadding(),
-        start = 16.dp,
-        end = 16.dp,
+        // The 16dp gutter, less the card's bleed, which each row adds back as
+        // padding inside its own rounded bounds (see ReaderRow).
+        start = 16.dp - ReaderCard.bleed,
+        end = 16.dp - ReaderCard.bleed,
       ),
     ) {
       itemsIndexed(items, key = { _, item -> item.id }) { index, item ->
-        Box(
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
-        ) {
-          when (item) {
-            is ReaderItem.LineItem ->
-              // Default ripple, same reasoning as ContinuationCard's own
-              // clickable — see tapLine's comment.
-              Box(
-                modifier = Modifier
-                  .fillMaxWidth()
-                  .clickable { tapLine(index) },
-              ) {
+        // On at once, so it shows as the pinch starts; off with a fade.
+        val highlight by animateFloatAsState(
+          targetValue = if (highlightedKey == item.id) 1f else 0f,
+          animationSpec = if (highlightedKey == item.id) snap() else tween(HIGHLIGHT_FADE_MS, easing = EaseOut),
+          label = "pinch anchor",
+        )
+        when (item) {
+          is ReaderItem.LineItem ->
+            // Default ripple, same reasoning as ContinuationCard's own
+            // clickable — see tapLine's comment.
+            ReaderRow(highlight = highlight, onTap = { tapLine(index) }) {
+              Box(Modifier.padding(horizontal = ReaderCard.bleed)) {
                 LineRow(
                   line = item.line,
-                  size = size,
+                  size = readerSize,
                   pauses = pauses,
                   schemes = schemes,
                   ratio = ratio,
@@ -538,15 +677,16 @@ fun BaniReader(bani: Bani, onBack: () -> Unit) {
                   precededByTitle = precedingItemIsTitle(items, index),
                 )
               }
-            is ReaderItem.ContinuationItem ->
-              ContinuationCard(
-                continuation = item.continuation,
-                size = size,
-                fonts = fonts,
-                onTapCard = { tapLine(index) },
-                onExpand = { expandedContinuations = expandedContinuations + item.continuation.id },
-              )
-          }
+            }
+          is ReaderItem.ContinuationItem ->
+            ContinuationCard(
+              continuation = item.continuation,
+              size = readerSize,
+              fonts = fonts,
+              highlight = highlight,
+              onTapCard = { tapLine(index) },
+              onExpand = { expandedContinuations = expandedContinuations + item.continuation.id },
+            )
         }
       }
     }

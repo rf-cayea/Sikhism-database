@@ -177,17 +177,17 @@ rendering, light/dark, A−/A+ sizing.
 and verified** — see [above](#packagesgurmukhi-in-the-apps). In active use for pause
 colouring and both pronunciation schemes.
 
-**Pinch-to-zoom differs between the platforms.** iOS was reworked and verified on
-device on 2026-10-10: live size changes, sensitivity 0.75, and the anchor row put
-back once on release rather than on every step, which is what removed a severe
-jitter at large sizes ([ios/README.md](ios/README.md#state-of-play)). **Android
-still corrects the scroll on every step and is unverified**, so it likely has the
-same jitter; port the iOS approach when Android is next worked on.
+**Pinch-to-zoom works the same way on both platforms.** Live size changes,
+sensitivity 0.75, the anchor row highlighted with toner, and the anchor put back
+once on release rather than on every step, which is what removed a severe jitter at
+large sizes on iOS ([ios/README.md](ios/README.md#state-of-play)). iOS was verified
+on device 2026-10-10; Android was ported 2026-10-14
+([android/README.md](android/README.md#reader-size-and-pinch)).
 
-Known inconsistency to resolve: **iOS persists reader font size** (`@AppStorage`)
-and **Android does not** (in-memory). Neither is obviously wrong but they should
-agree — likely persist on both, since an operator who sets a comfortable size should
-not have to redo it.
+**Reader font size is persisted on both, and starts from the system text setting
+once** ([display-controls.md](../docs/requirements/display-controls.md#starting-size)).
+Still inconsistent: iOS also persists pauses, pronunciations and ratio; Android
+holds those in memory.
 
 Known limitation: iOS focal zoom is accurate to within **one line height**, because
 `scrollTo(_:anchor:)` aligns a row's own anchor with the viewport's and cannot

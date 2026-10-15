@@ -128,6 +128,13 @@ dependencies {
   implementation(libs.androidx.activity.compose)
   debugImplementation(libs.androidx.compose.ui.tooling)
 
+  // Test-only, never shipped. JUnit 4 is what AGP's JVM unit-test task runs without
+  // further setup, and it has been stable for a decade; if it were abandoned the
+  // pinned version keeps working, since it needs nothing from outside the JVM. The
+  // tests in src/test pin the reader's sizing rules (ReaderSize.kt), which hold no
+  // Android types precisely so that no device or Robolectric is needed.
+  testImplementation(libs.junit)
+
   // No JSON library: org.json is in the platform and the payload is a few nested
   // arrays. kotlinx-serialization would add a dependency and a Gradle plugin whose
   // version has to track Kotlin's, for about twenty lines of parsing.

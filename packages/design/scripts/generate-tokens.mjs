@@ -44,7 +44,7 @@ const opacity = scalars('Opacity')
 const weight = scalars('Weight')
 const type = scalars('Type')
 
-for (const key of ['defaultSize', 'listSize', 'lineHeightRatio', 'minSize', 'phoneMaxSize', 'padMaxSize', 'startingSizeFactor', 'padStartingSize']) {
+for (const key of ['defaultSize', 'listSize', 'lineHeightRatio', 'minSize', 'phoneMaxSize', 'padMaxSize', 'startingSizeFactor', 'padStartingSize', 'androidBodySize']) {
   if (type[key] === undefined) throw new Error(`packages/design/tokens.md: type.${key} missing`)
 }
 for (const key of ['toner', 'tonerFaint']) {
@@ -52,10 +52,11 @@ for (const key of ['toner', 'tonerFaint']) {
 }
 const { lineHeightRatio } = type
 
-// The starting-size rule, written once here for the table check and once in the
-// generated Swift below; the two must stay the same arithmetic. Nearest even number,
-// because A± steps by 2. JS Math.round and Swift's default .rounded() both round
-// halves up for positive numbers, so the two agree on ties.
+// The starting-size rule, written once here for the table checks and once each in
+// the generated Swift and Kotlin below; the three must stay the same arithmetic.
+// Nearest even number, because A± steps by 2. JS Math.round, Swift's default
+// .rounded() and Kotlin's Double.roundToInt() all round halves up for positive
+// numbers, so they agree on ties.
 const startingSizeFor = (body) =>
   Math.min(type.phoneMaxSize, Math.max(type.minSize, 2 * Math.round((body * type.startingSizeFactor) / 2)))
 
@@ -76,6 +77,23 @@ for (const [, label, body, size] of startingRows) {
 const defaultRow = startingRows.find(([, label]) => label.startsWith('L '))
 if (!defaultRow || Number(defaultRow[3]) !== type.defaultSize) {
   throw new Error(`packages/design/tokens.md: defaultSize (${type.defaultSize}) must equal the L (default) starting size`)
+}
+// Android's table: the same rule, fed the dp Android gives `androidBodySize` sp at
+// each Font size step (see tokens.md). Seven rows, Pixel's steps; the 1.0 row is the
+// default and must land on defaultSize, as iOS's L row does.
+const androidRows = [...section('Starting size on Android').matchAll(/^\| ([\d.]+) \| ([\d.]+) \| `(\d+)` \|$/gm)]
+if (androidRows.length !== 7) {
+  throw new Error(`packages/design/tokens.md: expected 7 Android starting-size rows (one per Pixel Font size step), found ${androidRows.length}`)
+}
+for (const [, scale, body, size] of androidRows) {
+  const expected = startingSizeFor(Number(body))
+  if (Number(size) !== expected) {
+    throw new Error(`packages/design/tokens.md: Android starting size at font scale ${scale} is ${size}, but the rule gives ${expected} (${body} × ${type.startingSizeFactor})`)
+  }
+}
+const androidDefault = androidRows.find(([, scale]) => Number(scale) === 1)
+if (!androidDefault || Number(androidDefault[2]) !== type.androidBodySize || Number(androidDefault[3]) !== type.defaultSize) {
+  throw new Error(`packages/design/tokens.md: the Android 1.0 row must be ${type.androidBodySize}dp and defaultSize (${type.defaultSize})`)
 }
 if (type.padStartingSize < type.minSize || type.padStartingSize > type.padMaxSize) {
   throw new Error(`packages/design/tokens.md: padStartingSize ${type.padStartingSize} is outside ${type.minSize}–${type.padMaxSize}`)
@@ -195,8 +213,11 @@ ${Object.entries(color).map(([k, v]) => kotlinColor(k, v)).join('\n\n')}
   const val DEFAULT_SIZE = ${type.defaultSize}f
   const val LIST_SIZE = ${type.listSize}f
   const val MIN_SIZE = ${type.minSize}f
-  /** Phone maximum; Android does not yet distinguish tablets. */
-  const val MAX_SIZE = ${type.phoneMaxSize}f
+  const val PHONE_MAX_SIZE = ${type.phoneMaxSize}f
+  const val PAD_MAX_SIZE = ${type.padMaxSize}f
+
+  /** The zoom maximum for the device: a tablet fits larger text. */
+  fun maxSize(isTablet: Boolean) = if (isTablet) PAD_MAX_SIZE else PHONE_MAX_SIZE
 
   /**
    * Total line box as a multiple of font size, so it holds when zoomed. Gurmukhi
@@ -205,7 +226,27 @@ ${Object.entries(color).map(([k, v]) => kotlinColor(k, v)).join('\n\n')}
    */
   const val LINE_HEIGHT_RATIO = ${lineHeightRatio}f
 
-  fun clamp(size: Float) = size.coerceIn(MIN_SIZE, MAX_SIZE)
+  fun clamp(size: Float, isTablet: Boolean) = size.coerceIn(MIN_SIZE, maxSize(isTablet))
+
+  const val STARTING_SIZE_FACTOR = ${type.startingSizeFactor}
+  const val PAD_STARTING_SIZE = ${type.padStartingSize}f
+  /** Android has no Body text style; this many sp stands in for it. */
+  const val ANDROID_BODY_SIZE = ${type.androidBodySize}f
+
+  /**
+   * The reader's size on first launch
+   * (docs/requirements/display-controls.md#starting-size): on a phone,
+   * [STARTING_SIZE_FACTOR] × [bodyDp] — the dp Android gives [ANDROID_BODY_SIZE] sp at
+   * the person's Font size — to the nearest even number, within the zoom range; on a
+   * tablet, a fixed size. Same arithmetic as \`startingSizeFor\` in
+   * generate-tokens.mjs, which checks the table in tokens.md against it. In Double,
+   * as the generator computes, so the two agree on ties.
+   */
+  fun startingSize(isTablet: Boolean, bodyDp: Float): Float {
+    if (isTablet) return PAD_STARTING_SIZE
+    val even = 2 * Math.round(bodyDp * STARTING_SIZE_FACTOR / 2)
+    return clamp(even.toFloat(), isTablet = false)
+  }
 }
 `
 

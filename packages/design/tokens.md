@@ -121,8 +121,10 @@ reader default does not resize the list.
 **The zoom range is per device** (2026-10-10). `minSize` applies everywhere.
 `phoneMaxSize` is the iPhone's maximum and `padMaxSize` the iPad's: an iPad's wider
 screen fits larger text before lines shrink to a word or two. The apps pick the
-maximum for the device they run on. Android does not yet tell phones from tablets,
-so it uses `phoneMaxSize`.
+maximum for the device they run on. **Android counts a device as a tablet when its
+smallest screen width is at least 600dp** (2026-10-14) — the platform's own `sw600dp`
+line, which does not change with rotation or split screen. An unfolded foldable is a
+tablet; folded, a phone.
 
 | Token | Value |
 | --- | --- |
@@ -135,6 +137,7 @@ so it uses `phoneMaxSize`.
 | padMaxSize | `132` |
 | startingSizeFactor | `1.65` |
 | padStartingSize | `40` |
+| androidBodySize | `17` |
 
 ## Starting size
 
@@ -146,8 +149,8 @@ nearest even number, kept within `minSize`–`phoneMaxSize`.** Even, because A±
 steps of 2, so the starting size sits on the same grid as every tap after it. The
 app reads the Body size from iOS at first launch rather than from this table, so a
 change Apple makes to its sizes flows through without an edit. **On iPad:
-`padStartingSize`, whatever the setting.** Generated for iOS only for now. Android
-does not read these yet.
+`padStartingSize`, whatever the setting.** The same holds on an Android tablet;
+Android phones use the same rule through their own setting, below.
 
 The table shows what the rule gives. *iOS body text* was measured on an iPhone
 (2026-10-10) with `UIFont.preferredFont(forTextStyle: .body, compatibleWith:)`.
@@ -168,3 +171,32 @@ rule, so edit the factor and then the table, not the table alone.
 | AX3 | 40 | `66` |
 | AX4 | 47 | `78` |
 | AX5 | 53 | `88` |
+
+## Starting size on Android
+
+**The same rule, with Android's own measure of body text** (decided 2026-10-14).
+Android has no Body text style, so `androidBodySize` stands in for it: 17sp, iOS's
+Body size at the default setting, converted to dp at the person's Font size. That is
+`startingSizeFactor` × that dp, rounded to the nearest even number, within the zoom
+range. The default font scale gives 17dp and so `defaultSize`, as on iOS.
+
+**Android scales text non-linearly above a font scale of about 1.03**: large text
+grows less than small text, so 17sp at 2.0 is 29dp, not 34. Going through the
+platform's own conversion means the reader starts where the rest of the person's
+Android text has landed, not where a straight multiple would put it (2.0 × 28 = 56).
+The app asks Android for the dp value at first launch, so a manufacturer's own scales
+or a change to the curve flow through without an edit.
+
+The table shows Pixel's Font size steps. *17sp in dp* is interpolated from AOSP's
+`FontScaleConverterFactory` tables, **not yet measured on a device**. *Size* is
+derived from it, and the generator fails if any row disagrees with the rule.
+
+| Font scale | 17sp in dp | Size |
+| --- | --- | --- |
+| 0.85 | 14.45 | `24` |
+| 1.0 | 17 | `28` |
+| 1.15 | 18.95 | `32` |
+| 1.3 | 20.9 | `34` |
+| 1.5 | 23.5 | `38` |
+| 1.8 | 26.8 | `44` |
+| 2.0 | 29 | `48` |
