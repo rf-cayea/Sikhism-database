@@ -84,7 +84,8 @@ the right means.
 
 **The fix is to store the thing being adjusted, not its reciprocal.** Store
 **secondary size as a percentage of the Gurmukhi size**: `40%` to `100%`, in steps
-of `5%`.
+of `5%`. **The default is `60%`**, decided by the author 2026-10-15 (the
+`ratioDefault` token, [`packages/design/tokens.md`](../../packages/design/tokens.md#type)).
 
 | | Old | New |
 | --- | --- | --- |
@@ -978,8 +979,7 @@ have nothing to do with what they are reading.
     [above](#the-scholarly-scheme-emits-two-characters-almost-nothing-can-render).
     The replacement must keep the two marks distinct from each other. This is a
     `packages/gurmukhi` change and a transliteration judgement.
-15. **What is the default `Ratio`?** The range is 40–100% in 5% steps and nothing
-    states a starting value; the app currently uses 70% as a placeholder.
+15. *(Settled: the default `Ratio` is 60% — see [Ratio](#ratio).)*
 16. **What colour is secondary Variorum text?** The app uses `foregroundMuted`;
     nothing specifies it.
 17. **What are the web app's default sizes?** Not covered by
