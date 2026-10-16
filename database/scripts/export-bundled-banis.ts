@@ -27,6 +27,31 @@ const CONTINUES_INTO: Partial<Record<(typeof BUNDLED)[number], string>> = {
   RHRS: 'RHRT',
 }
 
+/**
+ * Marks dropped from a bundled bani's name, per script, because the apps list it as
+ * something wider than the database entry. RHRS is shown with RHRT's extra lines as
+ * a "Keep reading" card, so in the apps it is library.md's `Rehras Sahib`
+ * collection, not the (ਸ:) reading alone; the mark that tells RHRS and RHRT apart
+ * is left out of the listed name (chosen 2026-10-16). The database names are
+ * unchanged. Each mark must end the name exactly, or the export stops.
+ */
+const DROPPED_FROM_NAME: Partial<Record<(typeof BUNDLED)[number], Record<string, string>>> = {
+  RHRS: { Guru: ' (ਸ:)', Latn: ' (S.)' },
+}
+
+/** `name` with `id`'s dropped marks removed; see `DROPPED_FROM_NAME`. */
+const listedName = (id: (typeof BUNDLED)[number], name: Record<string, string>) => {
+  const dropped = DROPPED_FROM_NAME[id] ?? {}
+  return Object.fromEntries(
+    Object.entries(name).map(([script, text]) => {
+      const mark = dropped[script]
+      if (!mark) return [script, text]
+      if (!text.endsWith(mark)) throw new Error(`${id}: ${script} name "${text}" does not end with "${mark}"`)
+      return [script, text.slice(0, -mark.length)]
+    }),
+  )
+}
+
 const OUT_DIRS = ['../apps/ios/ShabadOS/Resources', '../apps/android/app/src/main/assets']
 
 type LineContent = {
@@ -135,7 +160,7 @@ for (const id of BUNDLED) {
     consola.info(`  ↳ continues into ${longerId}: +${extra} lines, ${continuations.length} gap(s)`)
   }
 
-  banis.push({ id, name: bani.name, sections, continuations })
+  banis.push({ id, name: listedName(id, bani.name), sections, continuations })
 }
 
 const json = JSON.stringify({ banis }, null, 0)
