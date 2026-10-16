@@ -123,11 +123,21 @@ private final class HeldRow {
   var restoring = false
 }
 
-/// What the reader reads from the scroll view's geometry. `offsetY` is not read;
-/// it is here so a scroll counts as a change.
+/// What the reader reads from the scroll view's geometry: the width for a
+/// rotation (`BaniReaderView.holdOrRestore`), the offset and top inset for a tap
+/// (`BaniReaderView.tapLine`).
 private struct ScrollSample: Equatable {
   var offsetY: CGFloat
+  var insetTop: CGFloat
   var width: CGFloat
+}
+
+/// The latest `ScrollSample`, for `BaniReaderView.tapLine`.
+///
+/// **A plain class, deliberately not observed**, like `RowFrames`: it is written
+/// on every scroll, and must not re-render the reader each time.
+private final class LatestScroll {
+  var sample = ScrollSample(offsetY: 0, insetTop: 0, width: 0)
 }
 
 private extension CGRect {
@@ -243,6 +253,12 @@ struct BaniReaderView: View {
   /// `@State` only to keep one instance for the view's lifetime.
   @State private var heldRow = HeldRow()
 
+  /// `@State` only to keep one instance for the view's lifetime.
+  @State private var latestScroll = LatestScroll()
+
+  /// Bound only so `tapLine` can scroll to an offset; see its doc comment.
+  @State private var scrollPosition = ScrollPosition(idType: String.self)
+
   /// The size the reader draws at. Kept within the zoom range here rather than
   /// only when the size changes, so a saved size from a wider range (an older
   /// version, or the other device's maximum) is drawn within this one's limits.
@@ -260,13 +276,9 @@ struct BaniReaderView: View {
   /// At most one at a time; a second tap while one is still fading simply
   /// retargets it.
   @State private var highlightedLineID: String?
-  /// How long the highlight stays fully on before it starts fading — long
-  /// enough to still be visible once `tapLine`'s `withAnimation()` scroll
-  /// (SwiftUI's own default duration, not a value this file controls) has
-  /// finished. SwiftUI doesn't expose that duration as a constant to read, so
-  /// this is a deliberate overestimate (the commonly-cited default is
-  /// ~0.35s) rather than a measured number — adjust directly if the
-  /// highlight is disappearing before the scroll settles, or the reverse.
+  /// How long the highlight stays fully on before it starts fading: the length
+  /// of `tapLine`'s 0.5s scroll, so the fade begins as the line settles. Change
+  /// the two together.
   private static let tapHighlightHoldDuration: Double = 0.5
   private static let tapHighlightFadeOutDuration: Double = 0.25
 
@@ -365,11 +377,13 @@ struct BaniReaderView: View {
           // (docs/requirements/display-controls.md#a-system-gesture-never-discards-a-reading-position).
           .background(ScrollsToTopDisabler())
         }
+        .scrollPosition($scrollPosition)
         .coordinateSpace(name: Self.space)
         // Keeps the line being read through a rotation; see `holdOrRestore`.
         .onScrollGeometryChange(for: ScrollSample.self) {
-          ScrollSample(offsetY: $0.contentOffset.y, width: $0.containerSize.width)
+          ScrollSample(offsetY: $0.contentOffset.y, insetTop: $0.contentInsets.top, width: $0.containerSize.width)
         } action: { _, sample in
+          latestScroll.sample = sample
           holdOrRestore(sample, items: Self.expanded(bani.items, expandedContinuations), proxy: proxy)
         }
         // simultaneousGesture, not gesture: a ScrollView installs its own
@@ -473,17 +487,23 @@ struct BaniReaderView: View {
   /// partially visible near the top — this is specific to there being
   /// nothing above the very first row, not a general "already visible" skip.
   ///
-  /// **Always `anchor: .top` when scrolling at all, including the bani's own
-  /// last row** — an earlier version special-cased rows near the end to
-  /// `anchor: .bottom`, reasoning that there's categorically no content below
-  /// the very last row to satisfy `.top` with. True, but it turned out not to
-  /// matter: the spring below (see its own comment) absorbs an unreachable
-  /// target the same way it absorbs an ordinary revised one — it settles
-  /// wherever the real maximum scroll offset is, smoothly, target label
-  /// notwithstanding. The special case bought nothing and cost real
-  /// correctness: a *wider* window (the last 3 rows) forced `.bottom` on rows
-  /// that could actually reach `.top` fine, which sometimes scrolled
-  /// backwards past content that didn't need to move at all.
+  /// **Scrolls the `ScrollPosition` binding to an offset, not to the row's id.**
+  /// An animated scroll to an id — `ScrollViewProxy.scrollTo` or
+  /// `ScrollPosition.scrollTo(id:)`, with or without `.scrollTargetLayout()` —
+  /// leaves the scroll view holding that id: the binding still reported it, with
+  /// `isPositionedByUser` false, through the user's next drag, and partway into it
+  /// the reader snapped back to the tapped line (iPhone, 2026-10-15). A scroll to
+  /// an offset leaves no id behind. Not `UIScrollView.setContentOffset`, which also
+  /// worked: the binding keeps it within SwiftUI.
+  ///
+  /// The offset is exact, not estimated: the tapped row is on screen, so its frame
+  /// has been measured. It is the row's top in `space` plus the content offset plus
+  /// the bar's height (`contentInsets.top`), because `scrollTo(y:)` measures from
+  /// below the bar while `contentOffset` does not; without the inset the line
+  /// landed 113pt short in portrait.
+  ///
+  /// `.smooth`, a spring without bounce, at its default 0.5s (chosen on an iPhone,
+  /// 2026-10-15, over a 0.4s spring).
   private func tapLine(_ item: ReaderItem, proxy: ScrollViewProxy, scroll: Bool = true) {
     // Instant, not animated — the highlight should already be visibly on
     // before the scroll below starts moving, not fading in alongside it.
@@ -494,31 +514,17 @@ struct BaniReaderView: View {
     // risks SwiftUI coalescing both into one update transaction, so the
     // highlight never gets a frame fully on-screen before the scroll's own
     // layout-heavy work begins.
-    //
-    // A spring, not `withAnimation{}`'s implicit `.default` ease curve.
-    // `LazyVStack` hasn't measured every row up front, so `scrollTo` starts
-    // toward an *assumed* offset and only discovers the real one as layout
-    // resolves along the way — near either end of the bani (not enough
-    // content left to satisfy `anchor: .top`/`.bottom`) that revision can be
-    // large. An ease curve is computed for a fixed start and end, so
-    // revising the end mid-flight makes it visually snap; a spring is
-    // velocity-driven and can be redirected toward a new target smoothly,
-    // with no snap — this doesn't stop the target from being revised, it
-    // just stops that revision from being visible as a pop. `response: 0.4,
-    // dampingFraction: 1` is *critically damped* — reaches the target
-    // directly with no bounce/overshoot of its own on top of everything
-    // above, which would only add a second source of jank. First pass, not a
-    // measured value — retune directly if it still reads as abrupt.
-    //
-    // Genuine smooth long-distance scrolling with an exact, always-reachable
-    // target would still need a different mechanism entirely (a UIKit-backed
-    // scroll view, which lays out and reports real content extent) — a real
-    // architecture change, not something to build speculatively while this
-    // remains merely "a bit janky at the very ends of a bani," not broken.
     if scroll {
       DispatchQueue.main.async {
-        withAnimation(.spring(response: 0.4, dampingFraction: 1)) {
+        guard let frame = rowFrames.frames[item.id] else {
+          // Not expected: the row was just tapped, so it has reported a frame.
+          // An unanimated scroll to the id leaves nothing behind to snap back to.
           proxy.scrollTo(item.id, anchor: .top)
+          return
+        }
+        let sample = latestScroll.sample
+        withAnimation(.smooth(duration: 0.5)) {
+          scrollPosition.scrollTo(y: sample.offsetY + sample.insetTop + frame.minY)
         }
       }
     }
@@ -581,9 +587,10 @@ struct BaniReaderView: View {
   /// **Done by hand because SwiftUI does not keep it.** Left alone, a rotation
   /// keeps whatever the scroll view anchors to, and rows above that were never
   /// measured at the new width are placed by estimated height, so the reader
-  /// jumped upwards (iPhone, 2026-10-15). **A `ScrollPosition` binding is not
-  /// used**: it chooses for itself which row is at the top, and on a rotation it
-  /// also left the reader shifted 16pt sideways until the next scroll.
+  /// jumped upwards (iPhone, 2026-10-15). **The `ScrollPosition` binding does not
+  /// do this**: it chooses for itself which row is at the top, and when it was
+  /// relied on for rotation it also left the reader shifted 16pt sideways until
+  /// the next scroll. It is bound only for `tapLine`.
   ///
   /// Nothing is recorded from a width change until the line has been put back:
   /// the relayout reports new frames first, and recording from them would hold

@@ -291,23 +291,39 @@ size, with and without pronunciations:
   further drift. A fix that only holds from the second rotation on has not fixed
   it.
 
-**Known bug: after a tap, scrolling snaps the tapped line back to the top once
-(seen on iPhone, 2026-10-15).** Present at `48bf2c57b3`, before the rotation fix
-above, so it comes from tap-to-scroll, not from that fix. Observed:
+**A tap scrolls to an offset, not to the tapped row's id.** The reader binds a
+`ScrollPosition` and calls `scrollTo(y:)`, animated with `.smooth` over 0.5s
+(`tapLine` in `BaniReaderView.swift`).
 
-- Tap a line, wait for the highlight to fade, then scroll slowly either way. At
-  some point the tapped line jumps back to where the tap put it, once; scrolling
-  is normal after that. It happens again after every tap, in either orientation.
-- Scrolling while the tap's scroll animation is still running does not cause it.
-  Scrolling without having tapped never causes it.
-- Where it happens varies by line and direction, with no rule found yet. Going
-  down it is often about halfway through the whole row (transliterations
-  included), going up often almost at once; but in Jap Ji Sahib, the line after
-  "Jap" jumps going up and never going down.
+- **Why not an id.** An animated scroll to an id leaves the scroll view holding
+  that id, and it snaps back to it later. This is true of `ScrollViewProxy.scrollTo`
+  and `ScrollPosition.scrollTo(id:)` alike, with or without `.scrollTargetLayout()`.
+  Measured on an iPhone (2026-10-15): through the next drag, the binding still
+  reported the tapped id with `isPositionedByUser` false, and partway into the drag
+  the content offset returned in one frame to the tap's target, with no change in
+  content height. An unanimated scroll to the id does not do this, but a second,
+  unanimated scroll after the animated one does not clear it.
+- **The offset.** The tapped row's top in the reader's space, plus `contentOffset.y`,
+  plus `contentInsets.top`. `scrollTo(y:)` measures from below the bar and
+  `contentOffset` does not: without the inset the line landed 113pt short in
+  portrait. The row is on screen, so its frame is measured, not estimated.
+- **Not `UIScrollView.setContentOffset`**, which also did not snap back: the
+  binding keeps the tap within SwiftUI. The binding is not used for rotation (see
+  above).
 
-Not yet understood. One reading, unproven: the scroll view keeps the tap's
-`scrollTo` target and snaps back to it when rows coming into view are measured and
-the content height changes.
+**Verified on an iPhone (2026-10-15).** The test is the observations that showed
+the snap-back. Each must hold in a long bani, portrait and landscape, for tapped
+lines near the top and further down, with and without pronunciations:
+
+- Tap a line, wait for the highlight to fade, then scroll slowly either way. It used
+  to jump back to where the tap put it, once, at some point; scrolling was normal
+  after that, until the next tap.
+- Where it happened varied by line and direction, with no rule found. In Jap Ji
+  Sahib, the line after "Jap" was first seen to jump going up and never going
+  down; in the measured runs, scrolling down, it jumped when the tapped row had
+  scrolled 101pt under the bar.
+- Scrolling while the tap's scroll was still animating did not cause it, and nor
+  did scrolling without having tapped.
 
 Reader font size, pauses, pronunciations and ratio are persisted on both
 platforms, under the same keys ([apps/README.md](../README.md#state-of-play)).
