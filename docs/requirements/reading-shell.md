@@ -36,10 +36,12 @@ from competing with the two that are used constantly.
 page — and it is what the app opens to. The two sidebars are transient surfaces
 over it, never destinations in their own right.
 
-**On mobile a sidebar takes the whole screen.** On wider surfaces (web, iPad) it
-behaves like claude.ai's sidebar: a toggleable panel alongside the viewer rather
-than over it. The same states and the same controls; only the presentation of
-"open" differs.
+**On mobile the viewer slides aside to show the sidebar beneath it** (2026-10-15).
+The viewer lies over the sidebar; opening one moves the viewer towards the far side,
+leaving its inner edge in view, faded towards the background. Tapping that edge
+returns to the viewer. On wider surfaces (web, iPad) it behaves like claude.ai's
+sidebar: a toggleable panel alongside the viewer rather than over it. The same
+states and the same controls; only the presentation of "open" differs.
 
 **Exactly one sidebar is open at a time.** Opening one closes the other.
 
@@ -91,16 +93,17 @@ horizontal swipe and does not gain one; the header button alone satisfies this.
 [interaction.md](../interaction.md#interactions) has the per-platform answers
 ([ADR-0013](../architecture/decisions/0013-three-layers-of-specification.md)).
 
-**The sidebar's own toggle is the same icon, filled.** When Journeys is open, the
-Journeys button is drawn filled to say "this is on", and tapping it turns it off
-and returns to the viewer. Same for Controls. **The icon never changes shape
-between states** — only its fill — because a shape change reads as a different
-button, and the person is trying to get back to where they were.
+**One Journeys button, on the viewer** (2026-10-15). While Journeys is open the
+viewer's edge stays in view, and the button with it; tapping it, or anywhere on that
+edge, returns to the viewer. The sidebar's header carries no second toggle. **The
+icon does not change between states**, because a changed icon reads as a different
+button, and the person is trying to get back to where they were. Whether Controls
+follows is open (`controlsActive` in [icons.md](../../packages/design/icons.md)).
 
 **Every path back to the viewer closes the sidebar.** Tapping a journey, tapping
-`Inactive sessions`, tapping `Library`, and tapping the filled toggle all return to
-the viewer in one action. There is no state where a person has tapped something and
-is still looking at the sidebar wondering whether it worked.
+`Inactive sessions`, tapping `Library`, and tapping the viewer's edge or its
+Journeys button all return to the viewer in one action. There is no state where a person has
+tapped something and is still looking at the sidebar wondering whether it worked.
 
 **Where a gesture exists it competes with text selection and with pinch-to-zoom**
 ([display-controls.md](display-controls.md#zoom)), and the conflict must be resolved
@@ -185,7 +188,7 @@ live use. A **continuous** journey is not ended by it, only its session, so its
 
 ```
 ┌────────────────────────────────┐
-│ (lotus) Shabad OS      [◧ on]  │  header — fixed
+│ (lotus) Shabad OS              │  header — fixed
 ├────────────────────────────────┤
 │ New journey                    │  ┐ sticky
 │ Tracker    Nitnem  ▓▓▓▓▓░░ 71% │  │
@@ -206,8 +209,8 @@ live use. A **continuous** journey is not ended by it, only its session, so its
 
 ### Header
 
-Lotus logo plus **Shabad OS** at the left; the filled Journeys toggle at the right,
-returning to the viewer.
+Lotus logo plus **Shabad OS** at the left. No toggle: the viewer's Journeys button,
+on the viewer's edge to the right, returns to the viewer.
 
 **The header does not scroll with the list.** It floats above the scrolling content,
 and the content **fades to nothing** as it passes beneath — a mask, not an opaque
@@ -376,7 +379,7 @@ list, not a new one, is what should be presented.
 
 - **Mutual exclusion.** Open Journeys, then trigger Controls ⇒ Journeys is closed.
 - **Toggle symmetry.** For each sidebar: header button opens it, swipe opens it, the
-  filled toggle closes it, and all three land in the same state.
+  same button closes it, and all three land in the same state.
 - **Swipe direction.** Rightward on the viewer ⇒ Journeys; leftward ⇒ Controls.
   Asserted on both platforms, including with the device in RTL locale — see open
   question 2.

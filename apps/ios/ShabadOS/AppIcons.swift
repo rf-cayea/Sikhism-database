@@ -32,19 +32,15 @@ enum AppIcons {
     UIImage(systemName: preferred) != nil ? preferred : fallback
   }
 
-  /// Open the Journeys sidebar. Specified by the author.
+  /// Open the Journeys sidebar, and close it from the sidebar's header. The same icon in both states, not a filled variant for open (chosen 2026-10-15). Specified by the author.
   /// SF Symbols, iOS 17.0+.
   static let journeys = "point.bottomleft.forward.to.point.topright.scurvepath"
-
-  /// Journeys sidebar is open; tapping returns to the viewer. Same shape, filled.
-  /// SF Symbols, iOS 17.0+.
-  static let journeysActive = "point.bottomleft.forward.to.point.topright.scurvepath.fill"
 
   /// Open the Controls sidebar.
   /// Lucide `settings-2` — an imageset in Assets.xcassets, not an SF Symbol.
   static let controls = LucideIcon(assetName: "settings-2")
 
-  /// Controls sidebar is open. PROPOSED, as above.
+  /// Controls sidebar is open. PROPOSED; under review alongside journeys, which uses one icon for both states.
   /// Lucide `settings-2` — an imageset in Assets.xcassets, not an SF Symbol.
   static let controlsActive = LucideIcon(assetName: "settings-2")
 
@@ -52,7 +48,7 @@ enum AppIcons {
   /// SF Symbols, iOS 13.0+.
   static let fullscreen = "arrow.up.left.and.arrow.down.right"
 
-  /// Exit fullscreen. Unlike journeysActive/controlsActive this is a distinct Lucide glyph, not the same shape filled — Lucide has no fullscreen fill variant. PROPOSED.
+  /// Exit fullscreen. Unlike controlsActive this is a distinct Lucide glyph, not the same shape filled — Lucide has no fullscreen fill variant. PROPOSED.
   /// SF Symbols, iOS 13.0+.
   static let fullscreenActive = "arrow.down.right.and.arrow.up.left"
 

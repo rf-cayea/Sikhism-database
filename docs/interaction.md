@@ -79,7 +79,7 @@ a focusable target. A blank cell is a feature that does not exist on some device
 | Secondary action on a row | Long-press | Right-click | Long-press `enter`, or a menu key | Long-press select |
 | Go back / dismiss | Back gesture | Click outside, or a close control | `esc` | Back |
 | Open a sidebar | Header button, or horizontal drag | Header button | Header button, plus a shortcut | Focus the header button |
-| Close a sidebar | Its filled toggle, or drag back | Its filled toggle | `esc`, or the toggle | Back, or the toggle |
+| Close a sidebar | Its toggle, a tap on the viewer's edge, or drag back | Its toggle | `esc`, or the toggle | Back, or the toggle |
 | Choose from an enumerated setting | Platform-native menu or sheet | Menu or popover | Focus and arrow through | Focus and arrow through |
 | Change zoom | Pinch, or the slider | Scroll with modifier, or the slider | `⌘=` / `⌘-`, or the slider | Focus the slider, arrows |
 | Presenter continuous advance | Drag and hold; rate rises with distance | Press and hold | Hold an arrow; rate rises with duration | Hold an arrow |
@@ -102,8 +102,17 @@ button is the focusable route and the drag was only ever an accelerator over it.
 **Android's system Back must close a sidebar**, and there is no iOS counterpart. A
 sidebar that ignores Back is the most reliable way to make an Android app feel
 foreign. It also constrains the drag: gesture navigation owns the screen edges, so a
-viewer drag must begin inside the content rather than at the edge
-([open questions](#open-questions)).
+viewer drag must begin inside the content rather than at the edge.
+
+**Where the sidebar drag may start** (decided 2026-10-15). On iOS, anywhere: inside
+the content or at the screen edge. The viewer has no back button, so there is no
+system back-swipe for an edge drag to collide with. On Android, inside the content
+only; the edges belong to gesture navigation. Either way, only a horizontal drag
+counts: a steeper one is a scroll and is left alone, and a pinch is never read as a
+drag.
+
+**Opening a sidebar gives a light haptic** on platforms that have haptics, by the
+header button or a drag alike. Closing one gives none (2026-10-16).
 
 **Continuous advance is one control with two measures of intent.** Touch has drag
 distance; a remote has hold duration. Both answer "how fast do you want this to go",
@@ -287,10 +296,8 @@ to record the exact name per icon in `packages/design/icons.md` rather than in a
    and a message loop on Windows; GObject and `webkit2gtk` on Linux), what breaks when
    those components version, whether `wry` vendors cleanly, and what its abandonment
    would actually cost given vendored source.
-3. **Does the viewer drag start at the edge or inside the content?** Edge-initiated
-   collides with the iOS back-swipe and Android gesture navigation; content-initiated
-   does not, but a drag from the very edge then does nothing, which people report as a
-   bug.
+3. **Resolved 2026-10-15:** where the viewer drag may start is now under "Where the
+   sidebar drag may start", above.
 4. **Do the sidebars mirror in RTL?** "Journeys is on the left" is a claim about
    reading direction, not about the screen, and this app renders Urdu-script content.
 5. **What is the gamepad mapping?** Named as a supported input model and absent from

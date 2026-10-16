@@ -18,22 +18,19 @@ package com.shabados.android
  * The Material Symbols name intended for each is in packages/design/icons.md.
  */
 object AppIcons {
-  /** Open the Journeys sidebar. Specified by the author. */
+  /** Open the Journeys sidebar, and close it from the sidebar's header. The same icon in both states, not a filled variant for open (chosen 2026-10-15). Specified by the author. */
   const val journeys = "ic_journeys"
-
-  /** Journeys sidebar is open; tapping returns to the viewer. Same shape, filled. */
-  const val journeysActive = "ic_journeys_active"
 
   /** Open the Controls sidebar. Lucide `settings-2`. */
   const val controls = "ic_controls"
 
-  /** Controls sidebar is open. PROPOSED, as above. Lucide `settings-2`. */
+  /** Controls sidebar is open. PROPOSED; under review alongside journeys, which uses one icon for both states. Lucide `settings-2`. */
   const val controlsActive = "ic_controls_active"
 
   /** Enter fullscreen. PROPOSED. */
   const val fullscreen = "ic_fullscreen"
 
-  /** Exit fullscreen. Unlike journeysActive/controlsActive this is a distinct Lucide glyph, not the same shape filled — Lucide has no fullscreen fill variant. PROPOSED. */
+  /** Exit fullscreen. Unlike controlsActive this is a distinct Lucide glyph, not the same shape filled — Lucide has no fullscreen fill variant. PROPOSED. */
   const val fullscreenActive = "ic_fullscreen_active"
 
   /** Font size of the reading area. Specified by the author. */

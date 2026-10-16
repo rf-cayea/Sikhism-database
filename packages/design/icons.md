@@ -37,7 +37,8 @@ congregation. It has already caught one, `translate`, which is 17.4.
 **A `Use Lucide` icon needs its SVG copied into the app; nothing fetches it.** On iOS
 that is an imageset in `apps/ios/ShabadOS/Assets.xcassets` named exactly as the
 Lucide column, holding the upstream SVG unmodified, with *Preserve Vector Data* on
-and *Render As: Template Image* (so it takes the tint like an SF Symbol). Lucide's
+and *Render As: Template Image* (so it takes the tint like an SF Symbol). Draw it with
+`ScaledLucide`, not a bare `Image(lucide:)`, so it follows Text Size as SF Symbols do. Lucide's
 `stroke="currentColor"` needs no change: a template image is drawn from the shape's
 coverage alone, so its colour is irrelevant — verified on iPhone in light and dark
 mode, 2026-10-11. The generator emits these as `LucideIcon`, not a `String`, and
@@ -96,7 +97,6 @@ and Compose's `Icon` tints regardless. Pin the commit and record each copy here.
 | Icon | Lucide | SF Symbol | Since | Material Symbol | Use Lucide |
 | --- | --- | --- | --- | --- | --- |
 | journeys | `route` | `point.bottomleft.forward.to.point.topright.scurvepath` | 17.0 | `conversion_path` |  |
-| journeysActive | `route` | `point.bottomleft.forward.to.point.topright.scurvepath.fill` | 17.0 | `conversion_path` |  |
 | controls | `settings-2` | `slider.horizontal.2.square` | 17.0 | `page_info` | **yes** |
 | controlsActive | `settings-2` | `slider.horizontal.3` | 13.0 | `tune` | **yes** |
 | fullscreen | `maximize-2` | `arrow.up.left.and.arrow.down.right` | 13.0 | `open_in_full` |  |
@@ -137,12 +137,11 @@ and Compose's `Icon` tints regardless. Pin the commit and record each copy here.
 
 | Icon | |
 | --- | --- |
-| journeys | Open the Journeys sidebar. Specified by the author. |
-| journeysActive | Journeys sidebar is open; tapping returns to the viewer. Same shape, filled. |
+| journeys | Open the Journeys sidebar, and close it from the sidebar's header. The same icon in both states, not a filled variant for open (chosen 2026-10-15). Specified by the author. |
 | controls | Open the Controls sidebar. |
-| controlsActive | Controls sidebar is open. PROPOSED, as above. |
+| controlsActive | Controls sidebar is open. PROPOSED; under review alongside journeys, which uses one icon for both states. |
 | fullscreen | Enter fullscreen. PROPOSED. |
-| fullscreenActive | Exit fullscreen. Unlike journeysActive/controlsActive this is a distinct Lucide glyph, not the same shape filled — Lucide has no fullscreen fill variant. PROPOSED. |
+| fullscreenActive | Exit fullscreen. Unlike controlsActive this is a distinct Lucide glyph, not the same shape filled — Lucide has no fullscreen fill variant. PROPOSED. |
 | zoom | Font size of the reading area. Specified by the author. |
 | ratio | Secondary text size relative to the Gurmukhi line. Specified by the author. |
 | weight | Font weight. Specified by the author. |

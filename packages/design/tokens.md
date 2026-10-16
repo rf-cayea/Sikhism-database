@@ -45,6 +45,18 @@ web's custom properties too.
 | vishraamMedium | `#13662b` | `#c4eda8` |
 | vishraamLight | `#5e438e` | `#decbff` |
 
+### Where the two backgrounds are used
+
+**`background` is the page**: the reader, and the default screen. **`backgroundBase`
+is what sits apart from it**: list cards, and the Journeys sidebar on iOS (white in
+light mode, `#222222` in dark; chosen 2026-10-16), so the sidebar reads as a
+separate surface beside the viewer's edge.
+
+**On Android the Journeys sidebar takes Material You's dynamic colour instead** of
+`backgroundBase`, so it follows the wallpaper the way the system's own drawers do.
+Material 3 gives a navigation drawer the `surfaceContainerLow` role; confirm the role
+when the Android sidebar is built. Not built yet.
+
 ### The vishraam colours
 
 **Three weights of pause, coloured by which marker ends the word** — verified against
@@ -118,6 +130,13 @@ size: the L row of [Starting size](#starting-size), which the generator checks.
 `listSize` is the bani list's Gurmukhi size. It is separate so that changing the
 reader default does not resize the list.
 
+**Interface text follows the system's Body size** (2026-10-16): Latin at the Body
+size itself, and Gurmukhi at `uiGurmukhiRatio` × the Body size, at `weightPrimary`.
+Gurmukhi at the same point size as Latin reads smaller and fainter — its letters sit
+lower in the line box and its strokes are thinner — so it is set larger and heavier
+to read as the same size. The iOS Journeys sidebar uses this in place of `listSize`;
+the reader's own size is separate and set by pinch.
+
 **The zoom range is per device** (2026-10-10). `minSize` applies everywhere.
 `phoneMaxSize` is the iPhone's maximum and `padMaxSize` the iPad's: an iPad's wider
 screen fits larger text before lines shrink to a word or two. The apps pick the
@@ -131,6 +150,7 @@ tablet; folded, a phone.
 | ratioDefault | `0.6` |
 | defaultSize | `28` |
 | listSize | `20` |
+| uiGurmukhiRatio | `1.15` |
 | lineHeightRatio | `1.6` |
 | minSize | `16` |
 | phoneMaxSize | `88` |

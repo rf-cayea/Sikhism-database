@@ -44,7 +44,7 @@ const opacity = scalars('Opacity')
 const weight = scalars('Weight')
 const type = scalars('Type')
 
-for (const key of ['defaultSize', 'listSize', 'lineHeightRatio', 'minSize', 'phoneMaxSize', 'padMaxSize', 'startingSizeFactor', 'padStartingSize', 'androidBodySize']) {
+for (const key of ['defaultSize', 'listSize', 'uiGurmukhiRatio', 'lineHeightRatio', 'minSize', 'phoneMaxSize', 'padMaxSize', 'startingSizeFactor', 'padStartingSize', 'androidBodySize']) {
   if (type[key] === undefined) throw new Error(`packages/design/tokens.md: type.${key} missing`)
 }
 for (const key of ['toner', 'tonerFaint']) {
@@ -143,6 +143,7 @@ ${Object.entries(color).map(([k, v]) => swiftColor(k, v)).join('\n\n')}
 
   static let defaultSize: Double = ${type.defaultSize}
   static let listSize: Double = ${type.listSize}
+  static let uiGurmukhiRatio: Double = ${type.uiGurmukhiRatio}
   static let minSize: Double = ${type.minSize}
   static let phoneMaxSize: Double = ${type.phoneMaxSize}
   static let padMaxSize: Double = ${type.padMaxSize}
@@ -212,6 +213,7 @@ ${Object.entries(color).map(([k, v]) => kotlinColor(k, v)).join('\n\n')}
 
   const val DEFAULT_SIZE = ${type.defaultSize}f
   const val LIST_SIZE = ${type.listSize}f
+  const val UI_GURMUKHI_RATIO = ${type.uiGurmukhiRatio}f
   const val MIN_SIZE = ${type.minSize}f
   const val PHONE_MAX_SIZE = ${type.phoneMaxSize}f
   const val PAD_MAX_SIZE = ${type.padMaxSize}f

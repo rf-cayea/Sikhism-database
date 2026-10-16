@@ -75,6 +75,7 @@ enum DesignTokens {
 
   static let defaultSize: Double = 28
   static let listSize: Double = 20
+  static let uiGurmukhiRatio: Double = 1.15
   static let minSize: Double = 16
   static let phoneMaxSize: Double = 88
   static let padMaxSize: Double = 132

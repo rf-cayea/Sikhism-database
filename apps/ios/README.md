@@ -325,5 +325,34 @@ lines near the top and further down, with and without pronunciations:
 - Scrolling while the tap's scroll was still animating did not cause it, and nor
   did scrolling without having tapped.
 
+**The app opens to the viewer, with Journeys beneath it** (`ReaderShell.swift`).
+The Journeys sidebar is a stand-in: a Nitnem list under the specified header. A
+cold launch, and 15 minutes without activity, show the default screen (ਸਤਿ ਸ੍ਰੀ
+ਅਕਾਲ and pills); what is being read is held in memory only. Opening slides the
+viewer aside, leaving a 72pt edge that returns to it; a horizontal drag anywhere
+opens and closes it; opening gives a light haptic. Findings the code relies on:
+
+- **Nothing may clip to a layer's layout frame.** That frame stops at the safe
+  area: a `clipShape` there cut the text off below the status bar and left a gap
+  above the home indicator. Masks and overlays that cover a layer ignore the safe
+  area themselves.
+- **The viewer is moved with `visualEffect`, not `offset`.** Its outline is
+  `ConcentricRectangle`, which matches the display at rest (55pt, checked against
+  UIKit's own value), but a concentric corner shrinks by its distance from the
+  display's corner, and `offset` moves the frame, so the corners went square.
+  While moved the corners also keep a 55pt minimum. `GeometryProxy.concentricCornerRadii`
+  (iOS 27) returned nothing on a full-screen view, so the radius is not read.
+- **The sidebar is plain SwiftUI: no `NavigationStack`, no `List`.** It zooms from
+  95% as the viewer slides, and the UIKit-backed containers answered the zoom by
+  laying out again at the smaller size; at full size everything jumped and a row
+  appeared. Its header is a `safeAreaBar`, which keeps the soft fade.
+- **A Lucide icon is drawn with `ScaledLucide`**, or it ignores Text Size.
+
+**Verified on an iPhone (2026-10-16):** rounded corners through the whole slide,
+the sidebar's fade and zoom with no jump, opening and closing by button, edge and
+drag. **Not yet checked:** a long-press text selection dragged sideways (nothing
+guards it from opening the sidebar), iPad (the sidebar is full screen there too,
+where the spec has it beside the viewer), and Android, which has none of this.
+
 Reader font size, pauses, pronunciations and ratio are persisted on both
 platforms, under the same keys ([apps/README.md](../README.md#state-of-play)).

@@ -203,6 +203,11 @@ private struct ScrollsToTopDisabler: UIViewRepresentable {
 
 struct BaniReaderView: View {
   let bani: Bani
+  /// Told of every tap, scroll and pinch, for the journey's idle boundary; see
+  /// `ReaderShell`.
+  let activity: ActivityClock
+  /// Set for the length of a pinch, so `ReaderShell`'s sidebar drag stands aside.
+  let pinch: PinchFlag
 
   // fileprivate, not private: `ContinuationBlock` (a separate type in this
   // same file) needs it too, to report its Expand button's frame into the
@@ -378,6 +383,15 @@ struct BaniReaderView: View {
           .background(ScrollsToTopDisabler())
         }
         .scrollPosition($scrollPosition)
+        // The bar has no background (see `.toolbarBackgroundVisibility` below), so
+        // this is all that sits behind its buttons: the text fades and blurs as it
+        // passes under them rather than being cut, which interaction.md requires.
+        // `.soft` is iOS 26's gradient fade; `.hard` is a sharper band, and
+        // `.automatic` leaves the choice to the system.
+        .scrollEdgeEffectStyle(.soft, for: .top)
+        .onScrollPhaseChange { _, phase in
+          if phase == .interacting { activity.touch() }
+        }
         .coordinateSpace(name: Self.space)
         // Keeps the line being read through a rotation; see `holdOrRestore`.
         .onScrollGeometryChange(for: ScrollSample.self) {
@@ -396,14 +410,23 @@ struct BaniReaderView: View {
     .background(DesignTokens.background)
     .navigationTitle(bani.latin)
     .navigationBarTitleDisplayMode(.inline)
+    // No bar background: the text scrolls up under the buttons, with nothing
+    // blurred or tinted behind them.
+    .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
     .toolbar {
-      ToolbarItemGroup(placement: .topBarTrailing) {
-        Button("Smaller", systemImage: "textformat.size.smaller") {
-          fontSize = DesignTokens.clamp(fontSize - 2)
+      // The title is a control (docs/requirements/reading-shell.md#the-viewer),
+      // drawn as its own glass pill. The actions that hang off it do not exist
+      // yet, so it does nothing when tapped.
+      ToolbarItem(placement: .principal) {
+        Button {} label: {
+          Text(bani.latin)
+            .font(.headline)
+            .lineLimit(1)
         }
-        Button("Larger", systemImage: "textformat.size.larger") {
-          fontSize = DesignTokens.clamp(fontSize + 2)
-        }
+        .buttonStyle(.glass)
+      }
+      .sharedBackgroundVisibility(.hidden)
+      ToolbarItem(placement: .topBarTrailing) {
         controlsStandIn
       }
     }
@@ -505,6 +528,7 @@ struct BaniReaderView: View {
   /// `.smooth`, a spring without bounce, at its default 0.5s (chosen on an iPhone,
   /// 2026-10-15, over a 0.4s spring).
   private func tapLine(_ item: ReaderItem, proxy: ScrollViewProxy, scroll: Bool = true) {
+    activity.touch()
     // Instant, not animated — the highlight should already be visibly on
     // before the scroll below starts moving, not fading in alongside it.
     highlightedLineID = item.id
@@ -548,7 +572,7 @@ struct BaniReaderView: View {
         Toggle(Pronunciation.latin.label, isOn: $pronLatin)
       }
     } label: {
-      Image(lucide: AppIcons.controls)
+      ScaledLucide(AppIcons.controls)
     }
   }
 
@@ -670,6 +694,8 @@ struct BaniReaderView: View {
   private func pinchToZoom(proxy: ScrollViewProxy) -> some Gesture {
     MagnifyGesture()
       .onChanged { value in
+        activity.touch()
+        pinch.active = true
         if pinchBaseline == nil {
           pinchBaseline = DesignTokens.clamp(fontSize)
           // Where the fingers went down, and which row was there. Both are in the
@@ -695,6 +721,7 @@ struct BaniReaderView: View {
         livePinchSize = next
       }
       .onEnded { _ in
+        pinch.active = false
         if let final = livePinchSize { fontSize = final }
         livePinchSize = nil
         pinchBaseline = nil

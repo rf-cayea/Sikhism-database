@@ -9,10 +9,8 @@ struct ShabadOSApp: App {
 
   var body: some Scene {
     WindowGroup {
-      NavigationStack {
-        BaniListView()
-      }
-      .modifier(StartingSize())
+      ReaderShell()
+        .modifier(StartingSize())
     }
   }
 }
@@ -22,7 +20,7 @@ struct ShabadOSApp: App {
 /// (docs/requirements/display-controls.md#starting-size).
 ///
 /// Written once and never recomputed. Someone who later changes their Text Size
-/// keeps the reader size they have, and a size they set by pinch or A± is never
+/// keeps the reader size they have, and a size they set by pinch is never
 /// overwritten. Attached at the root so it runs before the reader can open; the
 /// reader itself only ever reads the saved value.
 private struct StartingSize: ViewModifier {
