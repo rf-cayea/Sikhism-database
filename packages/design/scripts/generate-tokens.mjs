@@ -54,7 +54,7 @@ const { lineHeightRatio } = type
 
 // The starting-size rule, written once here for the table checks and once each in
 // the generated Swift and Kotlin below; the three must stay the same arithmetic.
-// Nearest even number, because A± steps by 2. JS Math.round, Swift's default
+// Nearest even number (tokens.md#starting-size says why it stays even). JS Math.round, Swift's default
 // .rounded() and Kotlin's Double.roundToInt() all round halves up for positive
 // numbers, so they agree on ties.
 const startingSizeFor = (body) =>

@@ -38,6 +38,10 @@ Font size of the reading area.
 a pinch made while it is not visible. The byline exists to teach the gesture; the
 slider is the fallback for someone who cannot make it.
 
+**There are no A−/A+ buttons** (2026-10-16), on either platform: pinch and this
+slider are the only ways to change the size. Until the Controls sidebar exists,
+pinch is the only one.
+
 Sizing bounds and starting sizes live in `packages/design/tokens.md` and are generated
 into the apps. They are not to be restated in platform code, or here.
 
@@ -59,7 +63,7 @@ reader from there.
   both orientations. An Android tablet is a device whose smallest screen width is at
   least 600dp.
 - **It is saved, then never recomputed.** Changing the system setting afterwards
-  does not move the reader. A size someone sets by pinch or A± always wins (see
+  does not move the reader. A size someone sets by pinch or the slider always wins (see
   [Persistence](#persistence)).
 
 Applies to iOS and Android. **The system setting picks only this first size**: the
@@ -824,6 +828,10 @@ uses — built because a plain SwiftUI tap gesture has no feedback of its own.
 needed building; a second, custom highlight layered on top would be redundant
 with what the platform already does, not an improvement on it. Two different
 answers to the same requirement, not one platform behind the other.
+
+**The scroll takes 0.5 seconds on both platforms** (2026-10-16), easing in and out
+with no overshoot (iOS: `.smooth(duration: 0.5)`). iOS holds its highlight for the
+same 0.5 seconds before fading it, so it starts to fade as the line settles.
 
 **The whole row is the target, not just its glyphs** — a short or centred line
 (a title) has empty space beside it that must tap the same as the text.

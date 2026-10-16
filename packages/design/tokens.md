@@ -165,8 +165,10 @@ The reader's size the first time the app opens
 ([display-controls.md](../docs/requirements/display-controls.md#starting-size)).
 
 **On a phone: `startingSizeFactor` × the system's Body text size, rounded to the
-nearest even number, kept within `minSize`–`phoneMaxSize`.** Even, because A± moves in
-steps of 2, so the starting size sits on the same grid as every tap after it. The
+nearest even number, kept within `minSize`–`phoneMaxSize`.** Even, so it sat on the
+2pt grid of the A± buttons. Those are gone (2026-10-16) and the rule is unchanged:
+dropping it would change the starting size of every new install, a decision of its
+own. The
 app reads the Body size from iOS at first launch rather than from this table, so a
 change Apple makes to its sizes flows through without an edit. **On iPad:
 `padStartingSize`, whatever the setting.** The same holds on an Android tablet;
