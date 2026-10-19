@@ -1,12 +1,15 @@
 #!/usr/bin/env bun
 /**
  * Checks, on an attached Android 16+ device, that the reader comes back as it was
- * after each thing that recreates the activity: rotation both ways, a dark theme
- * toggle, a Font size change, "Don't keep activities", and the process being killed
- * in the background. The README's hand checklist, as one command
- * (apps/android/README.md#reader-state-across-recreation).
+ * after each thing that recreates the activity while the process lives: rotation
+ * both ways, a dark theme toggle, a Font size change, and "Don't keep activities".
+ * Then that **the process being killed in the background starts a new journey**: the
+ * default screen, offering `continue reading` for the bani just read, since it is a
+ * daily bani read under 8 hours ago (decided 2026-10-16), and the reader's saved
+ * settings still there when it is opened again from there. The README's hand
+ * checklist, as one command (apps/android/README.md#reader-state-across-recreation).
  *
- *   bun apps/android/scripts/check-restore.ts ["Benti Chaupai"]
+ *   bun apps/android/scripts/check-restore.ts ["ਬੇਨਤੀ ਚੌਪਈ ਸਾਹਿਬ"]
  *
  * Install the build first (`./apps/build.sh android --run`). With more than one
  * device attached, set ANDROID_SERIAL. Run it when a change touches the reader's
@@ -15,10 +18,11 @@
  * **Only adb and the device's own tools**, so it adds no dependency: `monkey` sends
  * the launcher's intent, `uiautomator dump` reads the screen's accessibility tree,
  * `settings` and `cmd uimode` change the system. It drives the real app, so it
- * reads the screen by what the person sees — row text, "Back", "Controls",
- * "Expand", "Pauses", "Latin" — and must follow the reader when those change.
+ * reads the screen by what the person sees — row text, "Journeys", "Controls",
+ * "Expand", "Pauses", "Latin", the greeting — and must follow the app when those
+ * change. Banis are opened from the Journeys sidebar, which lists them in Gurmukhi.
  *
- * **What it checks, after every step:** the same bani is open; the same row is at
+ * **What it checks, after every step but the kill:** the same bani is open; the same row is at
  * the top; the expanded continuation is still expanded. The last is checked
  * through the top row: the script puts the continuation's first line at the top,
  * and that row only exists while it is expanded, so a collapsed continuation shows
@@ -26,12 +30,12 @@
  * setting shows there as well.
  *
  * **Pauses and Latin are read from the Controls menu after the process kill
- * only.** They come back from saved preferences, not from saved screen state, and
- * a killed process is the hardest case for that; reading the menu after every step
- * opened it nine more times to learn nothing new.
+ * only**, once the bani is opened again. They come back from saved preferences, not
+ * from the journey, and a killed process is the hardest case for that; reading the
+ * menu after every step opened it nine more times to learn nothing new.
  *
  * **What it does not check:** how quickly the screen rotates (watch
- * `adb logcat -s Choreographer:I`), or that a cold launch opens the list.
+ * `adb logcat -s Choreographer:I`), or the 15-minute idle boundary (ShellTest).
  *
  * Every system setting it changes, and the reader settings it toggles, are put back
  * before it exits, pass or fail.
@@ -43,8 +47,9 @@ import { join } from 'node:path'
 
 const APP = 'com.shabados.app'
 // A bani with a continuation, so the expanded state is exercised. Benti Chaupai
-// has one; the bundled list is in app/src/main/assets/banis.json.
-const BANI = process.argv[2] ?? 'Benti Chaupai'
+// has one. Its Gurmukhi name, as the sidebar shows it (app/src/main/assets/banis.json).
+const BANI = process.argv[2] ?? 'ਬੇਨਤੀ ਚੌਪਈ ਸਾਹਿਬ'
+const GREETING = 'ਸਤਿ ਸ੍ਰੀ ਅਕਾਲ'
 // How long to keep re-reading the screen for an expected state before failing.
 // Waits are on what the screen shows, not fixed sleeps, except where a change has
 // nothing on screen to wait for (see SETTLE_MS).
@@ -162,7 +167,8 @@ function waitFor(what: string, ready: (nodes: Node[]) => boolean): Node[] {
 }
 
 const appShown = (nodes: Node[]) => nodes.some((n) => n.pkg === APP)
-const readerShown = (nodes: Node[]) => nodes.some((n) => n.desc === 'Back') && rows(nodes).length > 0
+const readerShown = (nodes: Node[]) => headerButton(nodes) !== undefined && rows(nodes).length > 0
+const defaultShown = (nodes: Node[]) => nodes.some((n) => n.pkg === APP && n.text === GREETING)
 
 const tap = (node: Node) => shell(`input tap ${node.x} ${node.y}`)
 const back = () => shell('input keyevent KEYCODE_BACK')
@@ -179,13 +185,6 @@ function launch(ready: (nodes: Node[]) => boolean = readerShown) {
   waitFor('Shabad OS to open', ready)
 }
 
-/** A slow drag: moves about a screen, for a short list. */
-function swipeUp(nodes: Node[]) {
-  const height = Math.max(...nodes.map((n) => n.bottom))
-  shell(`input swipe 500 ${Math.round(height * 0.75)} 500 ${Math.round(height * 0.35)} 400`)
-  sleep(500)
-}
-
 /** Fast flings: each carries the list several screens. For reaching the end of a
  * bani, where Benti Chaupai's continuation is. */
 function flingUp(nodes: Node[]) {
@@ -198,14 +197,17 @@ function flingUp(nodes: Node[]) {
 
 type Reader = { title: string; topRow: string; pauses?: boolean; latin?: boolean }
 
-function backButton(nodes: Node[]): Node | undefined {
-  return nodes.find((n) => n.desc === 'Back')
+/** The reader's Controls button: present only while a bani is open, and it marks
+ * the header's band. */
+function headerButton(nodes: Node[]): Node | undefined {
+  return nodes.find((n) => n.desc === 'Controls')
 }
 
-/** Reader rows: clickable, with text, below the toolbar's buttons. The Expand
- * button is clickable text too, and is not a row. */
+/** Reader rows: clickable, with text, below the header's buttons. The Expand
+ * button is clickable text too, and is not a row. The sidebar's rows are not in the
+ * tree while it is closed. */
 function rows(nodes: Node[]): Node[] {
-  const below = backButton(nodes)?.bottom ?? 0
+  const below = headerButton(nodes)?.bottom ?? 0
   return nodes
     .filter((n) => n.clickable && n.content !== '' && n.content !== 'Expand' && n.top >= below)
     .sort((a, b) => a.top - b.top)
@@ -232,7 +234,7 @@ function withMenu<T>(use: (nodes: Node[]) => T): T {
   try {
     return use(menu)
   } finally {
-    // Closes the menu only. Pressed with no menu open, it would close the reader.
+    // Closes the menu only. Pressed with no menu open, it would leave the app.
     back()
     waitFor('the Controls menu to close', (nodes) => !menuShown(nodes))
   }
@@ -246,13 +248,24 @@ function setSetting(label: string, on: boolean) {
   })
 }
 
+/** Opens [BANI] from the Journeys sidebar, the way a person does. */
+function openFromSidebar() {
+  tap(find(screen(), (n) => n.desc === 'Journeys', 'the Journeys button'))
+  const row = (nodes: Node[]) => nodes.find((n) => n.clickable && n.content === BANI)
+  const nodes = waitFor(`"${BANI}" in the Journeys sidebar`, (nodes) => row(nodes) !== undefined)
+  tap(row(nodes)!)
+  waitFor(`"${BANI}" to open`, readerShown)
+}
+
 /** What the reader shows. With [settings], also Pauses and Latin, from the menu. */
 function read(settings: boolean): Reader {
   const nodes = screen()
-  const backNode = backButton(nodes) ?? fail('the reader is not open (no Back button) — it went back to the list')
-  // In the toolbar's band and not inside a row: rows scroll under the toolbar too.
+  const header =
+    headerButton(nodes) ??
+    fail(defaultShown(nodes) ? 'the reader is not open — the default screen is showing' : 'the reader is not open (no Controls button)')
+  // In the header's band and not inside a row: rows scroll under the header too.
   const title =
-    nodes.find((n) => n.text !== '' && !n.inClickable && n.y >= backNode.top && n.y <= backNode.bottom)?.text ?? ''
+    nodes.find((n) => n.text !== '' && !n.inClickable && n.y >= header.top && n.y <= header.bottom)?.text ?? ''
   const topRow = rows(nodes)[0]?.content ?? fail('no reader rows on screen')
   if (!settings) return { title, topRow }
   const [pauses, latin] = withMenu((menu) => [checked(menu, 'Pauses'), checked(menu, 'Latin')])
@@ -267,6 +280,7 @@ const original = {
   fontScale: shell('settings get system font_scale'),
   night: /yes/.test(shell('cmd uimode night')),
   finishActivities: shell('settings get global always_finish_activities'),
+  stayOn: shell('settings get global stay_on_while_plugged_in'),
 }
 
 function put(namespace: string, key: string, value: string) {
@@ -295,6 +309,7 @@ function restoreSystem() {
   put('system', 'user_rotation', original.rotation)
   put('system', 'font_scale', original.fontScale)
   put('global', 'always_finish_activities', original.finishActivities)
+  put('global', 'stay_on_while_plugged_in', original.stayOn)
   shell(`cmd uimode night ${original.night ? 'yes' : 'no'}`)
 }
 
@@ -317,19 +332,20 @@ const results: { step: string; ok: boolean; detail: string }[] = []
 let setupError: unknown
 
 try {
+  // The screen stays on while the device is plugged in (7: AC, USB and wireless),
+  // for this run only. Several steps wait without touching the screen, and a
+  // short screen timeout put a phone to sleep partway through (2026-10-16).
+  put('global', 'stay_on_while_plugged_in', '7')
+  shell('input keyevent KEYCODE_WAKEUP')
+
   // A fresh start, opened the way a person opens it.
   shell(`am force-stop ${APP}`)
   rotate(0, false)
-  launch((nodes) => nodes.some((n) => n.pkg === APP && n.clickable && n.content !== ''))
+  // A fresh process opens to the default screen.
+  launch(defaultShown)
+  openFromSidebar()
 
   let nodes = screen()
-  for (let i = 0; i < 5 && !nodes.some((n) => n.clickable && n.content.includes(BANI)); i++) {
-    swipeUp(nodes)
-    nodes = screen()
-  }
-  tap(find(nodes, (n) => n.clickable && n.content.includes(BANI), `"${BANI}" in the bani list`))
-  waitFor(`"${BANI}" to open`, readerShown)
-
   // Settings away from their defaults, so a reset shows. Put back at the end.
   savedReaderSettings = withMenu((menu) => ({ pauses: checked(menu, 'Pauses'), latin: checked(menu, 'Latin') }))
   setSetting('Pauses', false)
@@ -375,13 +391,6 @@ try {
       launch()
       put('global', 'always_finish_activities', original.finishActivities)
     }],
-    ['process killed in the background, icon', () => {
-      home()
-      shell(`am kill ${APP}`)
-      sleep(1000)
-      if (shell(`pidof ${APP} || true`)) fail('the process survived `am kill`; the step would not test process death')
-      launch()
-    }, true],
   ]
 
   for (const [step, run, settings = false] of steps) {
@@ -401,11 +410,33 @@ try {
     results.push({ step, ok: differences.length === 0, detail: differences.join('; ') })
     console.log(`${differences.length === 0 ? '✓' : '✗'} ${step}${differences.length ? ` — ${differences.join('; ')}` : ''}`)
   }
+
+  // Process death is a new journey: the default screen, offering to continue the
+  // bani just read. The settings are saved preferences, so they are still there once
+  // it is open again.
+  home()
+  shell(`am kill ${APP}`)
+  sleep(1000)
+  if (shell(`pidof ${APP} || true`)) fail('the process survived `am kill`; the step would not test process death')
+  launch(defaultShown)
+  const continueButton = screen().find((n) => n.clickable && n.content.startsWith('Continue reading'))
+  const continueOk = continueButton?.content.includes(expected.title) ?? false
+  const killStep = `process killed in the background: default screen, continue reading "${expected.title}"`
+  results.push({ step: killStep, ok: continueOk, detail: continueButton ? continueButton.content : 'no "Continue reading"' })
+  console.log(`${continueOk ? '✓' : '✗'} ${killStep}${continueOk ? '' : ` — ${continueButton?.content ?? 'no "Continue reading"'}`}`)
+  if (!continueButton) fail('nothing to continue, so the bani cannot be reopened the way a person would')
+  tap(continueButton)
+  waitFor(`"${BANI}" to reopen`, readerShown)
+  const reopened = read(true)
+  const settingsStep = 'after the kill, the bani reopened keeps Pauses and Latin'
+  const settingsOk = reopened.pauses === expected.pauses && reopened.latin === expected.latin
+  results.push({ step: settingsStep, ok: settingsOk, detail: `pauses ${reopened.pauses}, latin ${reopened.latin}` })
+  console.log(`${settingsOk ? '✓' : '✗'} ${settingsStep}${settingsOk ? '' : ` — pauses ${reopened.pauses}, latin ${reopened.latin}`}`)
 } catch (error) {
   setupError = error
 } finally {
   restoreSystem()
-  if (savedReaderSettings && backButtonVisible()) {
+  if (savedReaderSettings && headerButtonVisible()) {
     try {
       setSetting('Pauses', savedReaderSettings.pauses)
       setSetting('Latin', savedReaderSettings.latin)
@@ -416,9 +447,9 @@ try {
   }
 }
 
-function backButtonVisible(): boolean {
+function headerButtonVisible(): boolean {
   try {
-    return backButton(screen()) !== undefined
+    return headerButton(screen()) !== undefined
   } catch {
     return false
   }
@@ -432,5 +463,5 @@ if (setupError) {
   process.exit(1)
 }
 const failed = results.filter((r) => !r.ok)
-console.log(`\n${results.length - failed.length}/${results.length} steps restored the reader.`)
+console.log(`\n${results.length - failed.length}/${results.length} steps passed.`)
 process.exit(failed.length === 0 ? 0 : 1)

@@ -123,7 +123,7 @@ on the JVM. `BaniReaderView.kt` only measures and draws.
 - **Sizes are dp, drawn as-is.** Reading text is rendered with the font scale
   removed (`ReaderText`), so `.sp` equals dp. Android's font scale picks only
   the starting size, once, at first launch (`MainActivity`, via
-  `ReaderSize.saveStartingSizeOnce`). The toolbar and the Expand button are outside
+  `ReaderSize.saveStartingSizeOnce`). The header and the Expand button are outside
   that wrapper and still follow the system setting.
 - **Saved in SharedPreferences** (`ReaderPreferences.kt`), not DataStore, which
   would be a dependency for one float. The reader draws the saved size clamped to
@@ -163,65 +163,111 @@ on the JVM. `BaniReaderView.kt` only measures and draws.
 [tokens.md's Android table](../../packages/design/tokens.md#starting-size-on-android)
 is interpolated from AOSP's font-scale tables, not measured.
 
-## Reader toolbar
+## Reading shell
 
-**Icon buttons, not text** (2026-10-15). The text buttons (Back, A-, A+, ⋯) scaled
-with the system Font size. At the largest Font size and Display size they took most
-of the width and left the bani title as "…". Icons are dp and do not scale:
+Built 2026-10-16 to match iOS's `ReaderShell.swift`
+([reading-shell.md](../../docs/requirements/reading-shell.md)). The rules are in
+`Shell.kt` (Compose state, no drawing), pinned by `ShellTest`; `ReaderShell.kt`
+measures and draws.
 
-- **Back and Controls** are vector drawables in `res/drawable/` (`ic_back`, Material
-  Symbol `arrow_back`; `ic_controls`, Lucide `settings-2`). Where they came from and
-  how they were imported is recorded in
-  [icons.md](../../packages/design/icons.md#android-drawables). The toolbar uses
-  `R.drawable.*`, not `AppIcons`' strings through `getIdentifier`, so a missing
-  drawable fails the build instead of drawing a blank button. `ToolbarIconsTest`
-  checks the names still match `AppIcons`.
-- **Smaller and Larger are the letters "a" and "A"**, chosen by the author. They have
-  no icons.md rows, because they go away when the Controls sidebar lands. Their
-  size is 20dp converted to sp, so like the icons they ignore Font size.
-- **Not `material-icons-extended`.** It is a large artifact holding the older Material
-  Icons rather than the Material Symbols that icons.md names. Hand-imported
-  drawables are what `AppIcons.kt` was generated for.
-
-Content descriptions are "Back", "Smaller", "Larger", "Controls", matching the
-iOS button labels.
-
-**Verified on device 2026-10-15**, light and dark, at maximum Font size and
-Display size: the bani title shows readable text.
-
-## Tests
-
-```
-cd apps/android && ./gradlew :app:testDebugUnitTest
-```
-
-JVM unit tests only, JUnit 4 (test-only dependency). No instrumented tests:
-SharedPreferences round-tripping across a restart is checked by hand, not by a
-test. The same goes for [reader state across recreation](#reader-state-across-recreation).
-
-## Reader state across recreation
-
-Rotation, a theme change, a system Font size change and process death all destroy
-and recreate `MainActivity`. **What the person had open comes back**: the open bani,
-the scroll position, pauses, pronunciations, ratio and expanded continuations.
-Font size, pauses, pronunciations and ratio come back because they are persisted
-across launches, in the `reader` SharedPreferences under iOS's `@AppStorage` keys
-(`ReaderSettings` in `ReaderPreferences.kt`; [Reader size and pinch](#reader-size-and-pinch)).
-Each is written only when the person changes it, so an untouched setting keeps
-following its default (`ReaderDefaults`, pinned by `ReaderDefaultsTest`).
-
+- **The app opens to the viewer.** With nothing open it shows the default screen:
+  ਸਤਿ ਸ੍ਰੀ ਅਕਾਲ, the pills (`DefaultScreenPills`, ids not in the corpus skipped), and
+  `continue reading` when `ContinueReading` allows. The pills sit in a row when all
+  fit and one above another otherwise (`RowOrColumn`), never a row that wraps
+  partway, as iOS's `ViewThatFits`.
+- **The open bani lives in process memory** (`Session` in `MainActivity.kt`), not
+  saved instance state. Configuration changes keep it; process death is a new
+  journey (decided 2026-10-16). The reader is keyed by an id new in each process:
+  its scroll position is still `rememberSaveable`, which does outlive the process,
+  and without the key a reader opened after a process death restored the old
+  reader's scroll position.
+- **`continue reading` is saved** (`lastReadId`, `lastReadAt` in the `reader`
+  preferences): at opening, when a journey ends, and in `onStop`, since a process in
+  the background can be killed without warning. Not on every touch. The idle
+  boundary uses `elapsedRealtime`; when something was read uses the wall clock,
+  which means the same thing after the process is gone. The time is the last
+  activity, carried from one clock to the other.
+- **Activity is any pointer event**, read in the Initial pass at the shell's root
+  and never consumed, so tap, scroll, pinch and sidebar use all count. It writes a
+  plain field, not state, so it recomposes nothing. A coroutine checks the idle
+  boundary every 10s while composed, and `onStart` checks on return.
+- **The sidebar's width is the screen's short side less the 72dp edge**
+  (`Sidebar.travel`), so it is as wide in landscape as in portrait, and the
+  tap-to-close edge covers all of the viewer left in view. The drag uses the same
+  distance.
+- **Controls and text are inset by the side safe area** (`sideSafeArea`, the sides
+  of `WindowInsets.safeDrawing`): a camera cutout or a three-button navigation bar
+  in landscape, nothing in portrait. The viewer and sidebar are drawn edge to edge,
+  so without it the header's buttons, the reader's text and the sidebar's rows sat
+  behind the cutout. The header and the reader take both sides, so the buttons stay
+  level with the text; the sidebar takes the left, its right lying under the
+  viewer. Backgrounds are not inset.
+- **Everything the slide moves is read in `graphicsLayer` and draw blocks**, so a
+  frame of the slide redraws without recomposing or laying out. **The sidebar is
+  laid out at its full width throughout and only drawn scaled and faded**; nothing
+  in it re-lays out as it reaches full size. On iOS, containers that laid out again
+  made the rows jump and an extra row appear.
+- **The viewer's corners come from `WindowInsets.getRoundedCorner`**, read when the
+  outline is made (`DisplayCorners`), since the insets may not have arrived at first
+  composition. It clips only while moved. A display without rounded corners reports
+  none, and the viewer stays square there.
+- **The drag** (`sidebarDrag`) reads the Initial pass so it sees a drag before the
+  list or a row. It is judged once, at the platform touch slop: horizontal only if
+  more than 1.5× as wide as tall and towards a change. Once horizontal it consumes
+  every event, so the list does not scroll and the row does not count a tap. A drag
+  that starts inside `WindowInsets.systemGestures` is left to system Back; with
+  three-button navigation those insets are 0 and a drag may start anywhere. A second
+  finger ends it, and a drag already moving settles back. On release, the drag plus
+  0.2s of its velocity decides open or closed.
+- **System Back closes the sidebar** (`BackHandler`, enabled only while open). With
+  it closed, Back is the system's, and leaves the app.
+- **The haptic is `HapticFeedbackConstants.CONTEXT_CLICK`**, the platform's light
+  tick, played only when `ShellState.setJourneys` reports that it opened the sidebar.
+- **Whichever surface is covered has no semantics** (`clearAndSetSemantics`): the
+  sidebar while closed, the viewer while aside, leaving its edge as the one target.
+  Otherwise TalkBack, and `check-restore.ts`, find the sidebar's rows behind the
+  reader.
+- **The header has no background, and the content fades beneath it**
+  (`fadingUnder`): the list draws into an offscreen layer and a `DstIn` gradient
+  keeps a flat 8% of it down to 60% of the way through the status bar, then rises
+  evenly from there to all of it at the header's bottom edge (chosen 2026-10-16). The sidebar's list fades
+  the same way under its header. Material's top bars change colour and elevation
+  rather than masking.
+- **The app theme sets the content colour to the text colour** (`LocalContentColor`
+  in `ShabadOSTheme`). Ripples and icons are drawn in it. A `Scaffold` or `Surface`
+  would set it; the shell has neither, and Material's default is black, so in dark
+  mode the header's icons and every tap's ripple were black on black.
+- **Header icons are `R.drawable`**, `ic_journeys` (Material Symbol
+  `conversion_path`) and `ic_controls` (Lucide `settings-2`), recorded in
+  [icons.md](../../packages/design/icons.md#android-drawables). A missing drawable
+  fails the build instead of drawing a blank button; `HeaderIconsTest` checks the
+  names still match `AppIcons`. Icons are dp and do not follow Font size. Not
+  `material-icons-extended`, a large artifact holding the older Material Icons
+  rather than the Material Symbols icons.md names.
+- **Interface text follows Font size**: Latin at `androidBodySize` sp, Gurmukhi at a
+  ratio of it through `bodyTimes`, which multiplies after Body has become dp.
+  Multiplying the sp would send a large size through Android's non-linear font
+  scaling again, and it would grow less than the Body text beside it.
+- **Tap a line scrolls by the row's measured offset** with a 0.5s
+  `FastOutSlowInEasing` tween; `animateScrollToItem` takes no duration. The first
+  row never scrolls (`TapScroll`).
+- **No Material You dynamic colour** (decided 2026-10-16). The sidebar and the
+  viewer's controls (the pills, `continue reading`, the title pill and a persistent
+  circle behind each header button) are `backgroundBase`, the same token as iOS's
+  sidebar; Material's `surfaceVariant` carries it (`Theme.kt`). Dynamic roles were
+  tried for both (`surfaceContainerLow`, `surfaceContainerLowest`,
+  `surfaceContainerHigh`, `secondaryContainer`) and set them apart from the rest of
+  the app.
 - **`rememberSaveable`, not `android:configChanges`.** `configChanges` only covers
   the changes it lists, so process death would still lose state. It also leaves the
   app to handle each listed change itself, including the tablet and size logic,
   which reads `resources.configuration`.
-- **The open bani is saved by id** (`App` in `MainActivity.kt`) and looked up with
-  `List<Bani>.withId`. An id the corpus no longer has shows the list.
-  `OpenBaniTest` covers the lookup. **A stopgap, for as long as the bani list is
-  the home screen.** Once the viewer is what the app opens to and journeys keep
-  the open tabs ([reading-shell.md](../../docs/requirements/reading-shell.md#four-surfaces-one-of-them-always-visible)),
-  the open item comes back from the journey, and this saved id goes with the list.
-  The scroll position does not: journeys record the line tapped, not how far the
-  reader scrolled, so the saved list state below stays.
+- **The open bani is held by id in process memory** (`ShellState.openId`, see
+  [Reading shell](#reading-shell)) and looked up with `List<Bani>.withId`. An id the
+  corpus no longer has shows the default screen; `OpenBaniTest` covers the lookup.
+  Once journeys are stored, the open item comes back from the journey. The scroll
+  position does not: journeys record the line tapped, not how far the reader
+  scrolled, so the saved list state below stays.
 - **Scroll restores through `rememberLazyListState`**, which needs two things. The
   rows must have stable keys (`ReaderItem.id`), and the expanded continuations must
   be restored in the same first composition, so the saved index points into the
@@ -230,6 +276,17 @@ following its default (`ReaderDefaults`, pinned by `ReaderDefaultsTest`).
   **Verified on a phone 2026-10-15**: the top line stays put through repeated
   rotations in any order, whether it was tapped or scrolled to. iOS passes the
   same test since 2026-10-15 ([ios/README.md](../ios/README.md#state-of-play)).
+- **Judge animation smoothness on a release build, never a debug one.** The tap
+  scroll felt juddery in debug builds and smooth in release (Pixel 7a, 2026-10-19,
+  R8 still off); changing its easing did not help. To check on a phone, sign the
+  release APK with the debug key so it installs over a debug build:
+  `apksigner sign --ks ~/.android/debug.keystore --ks-pass pass:android` on a copy
+  of `app-release.apk`. Measure with `adb shell dumpsys gfxinfo com.shabados.app`
+  (`reset` first).
+- **Animations that run after the finger lifts ask for the high frame rate.** A
+  Pixel 7a runs at 90Hz only while touched and at 60Hz otherwise, so the tap
+  scroll requests `REQUESTED_FRAME_RATE_CATEGORY_HIGH` for its length
+  (`BaniReaderView.tapLine`). The sidebar's settle animation does not yet.
 - **Recreation must be cheap, because rotation waits for it.** Android starts the
   rotation only once the recreated activity has drawn its first frame. Parsing the
   corpus in `App()` held every rotation for 130–150 skipped frames on a phone
@@ -239,11 +296,11 @@ following its default (`ReaderDefaults`, pinned by `ReaderDefaultsTest`).
   skips about 185. Measure with that same logcat line
   after any change to what `onCreate` or the first composition does.
 - **Transient state stays plain `remember`**: the pinch anchor and its highlight,
-  the live pinch size, and whether the Controls menu is open.
+  the live pinch size, the slide's position, and whether the Controls menu is open.
+  Whether the sidebar is open is in `ShellState`, so it survives rotation.
 - **The open bani, scroll position and expanded continuations last for recreation
-  only, not launches.** A cold launch opens the list, and each bani opens with its
-  continuations collapsed. Whether a cold launch resumes the last bani belongs to
-  the journeys work (docs/requirements/journeys.md), not here.
+  only, not launches.** A cold launch opens the default screen, and each bani opens
+  with its continuations collapsed.
 - **No Compose UI test.** `StateRestorationTester` needs
   `androidx.compose.ui:ui-test-junit4` plus instrumented or Robolectric tests, which
   is a dependency decision that has not been made. Checked by hand instead: with the
@@ -251,21 +308,24 @@ following its default (`ReaderDefaults`, pinned by `ReaderDefaultsTest`).
   both ways, (2) toggle dark theme, (3) change Font size, (4) with Developer options
   > "Don't keep activities" on, switch away and back, (5) `adb shell am kill
   com.shabados.app` while in the background, then reopen from Recents. All five
-  passed on a phone 2026-10-15. **Scripted** as
+  passed on a phone 2026-10-15; step 5 now expects the default screen with
+  `continue reading`. **Scripted** as
   `bun apps/android/scripts/check-restore.ts`, which drives an attached device
   through adb alone and puts every setting back. Run it when a change touches the
   reader's state, the activity, or the first composition, not on every commit. It
-  does not judge how quickly the screen rotates. 10/10 on a phone 2026-10-15.
-- **Leave with Home, not Back.** Back closes the reader by design, and a second Back
-  closes the app, so the list showing afterwards is correct.
+  does not judge how quickly the screen rotates. It opens banis from the Journeys
+  sidebar by their Gurmukhi names, and keeps the screen on for its run: a 30s screen
+  timeout put a phone to sleep partway through. 11/11 on a Pixel 7a 2026-10-16.
+- **Leave with Home or Back.** With the sidebar closed, Back leaves the app, which
+  moves it to the background rather than finishing it.
 - **Start the app from its icon before testing a return through the icon.**
   `apps/build.sh --run` launches with `am start -n`, which is not the intent the
   home-screen icon sends. In a task started that way, tapping the icon started a
-  fresh activity on top, showing the list, while Recents restored correctly. Swipe
+  fresh activity on top, while Recents restored correctly. Swipe
   the app away and open it from the icon first, and the icon restores too. Play
   installs are opened from the icon, so users never see this.
-- **Swiping the app away in Recents discards saved state**, so it opens to the list.
-  That is the cold launch this change leaves alone.
+- **Swiping the app away in Recents ends the process**, so it opens to the default
+  screen, with `continue reading` as after any process death.
 
 ## Content
 

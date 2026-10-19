@@ -29,6 +29,28 @@ class PreferencesSizeStore(private val prefs: SharedPreferences) : SizeStore {
   }
 }
 
+/**
+ * The bani last read and when, for `continue reading` after the process is gone
+ * (ContinueReading in Shell.kt). Keys `lastReadId` and `lastReadAt`, the time in
+ * wall-clock milliseconds; iOS uses the same key names in UserDefaults, with a Date.
+ */
+class PreferencesLastReadStore(private val prefs: SharedPreferences) : LastReadStore {
+  override fun get(): LastRead? {
+    val id = prefs.getString(ID, null) ?: return null
+    if (!prefs.contains(AT)) return null
+    return LastRead(id, prefs.getLong(AT, 0))
+  }
+
+  override fun set(value: LastRead) = prefs.edit().putString(ID, value.id).putLong(AT, value.atMs).apply()
+
+  private companion object {
+    const val ID = "lastReadId"
+    const val AT = "lastReadAt"
+  }
+}
+
+fun Context.lastReadStore() = PreferencesLastReadStore(getSharedPreferences("reader", Context.MODE_PRIVATE))
+
 fun Context.readerSizeStore() = PreferencesSizeStore(getSharedPreferences("reader", Context.MODE_PRIVATE))
 
 /** What the reader shows before the person changes anything

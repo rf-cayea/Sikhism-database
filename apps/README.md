@@ -172,44 +172,41 @@ Signing, custody, and versions are platform-specific: see
 ## State of play
 
 Both apps build, install, and run. Verified working: reader, Sant Lipi rendering,
-light/dark. Android still has the bani list as its first screen and A−/A+ sizing;
-iOS has neither since 2026-10-16 (see the table below).
+light/dark. **Both open to the viewer, with the Journeys sidebar beneath it**
+(Android since 2026-10-16): the default screen when nothing is being read, a header
+with the Journeys button, the title in a pill and the Controls stand-in, and no
+A−/A+ (pinch is the only way to resize until the Controls sidebar exists). The
+Controls button on both is a stand-in until that sidebar replaces it.
 
-**The reader toolbar is icons on both platforms.** Android moved from text buttons to
-icons on 2026-10-15 ([android/README.md](android/README.md#reader-toolbar)), with
-Smaller/Larger drawn as the letters "a"/"A". iOS has only the Journeys and Controls
-buttons and a title pill. The Controls button on both is a stand-in until the
-Controls sidebar replaces it.
+### The reading shell on both platforms (2026-10-16)
 
-### iOS ahead of Android (2026-10-16)
+What iOS built first in the reading shell, and where Android stands on each.
+**Same requirement** means the spec applies to both; **own mechanism** means the
+behaviour is shared but each platform does it its own way; **iOS only** answers an
+iOS or SwiftUI problem Android does not have; **to decide** is not settled.
 
-What iOS gained in the reading shell, and what Android needs for each. **Same
-requirement** means the spec applies to both and Android must build it; **same
-requirement, own mechanism** means the behaviour is shared but the platform does it
-its own way; **iOS only** means it answers an iOS or SwiftUI problem Android does not
-have; **to decide** means Android's answer is not settled.
-
-| Feature (iOS) | Spec | Android |
+| Feature | Spec | Android |
 | --- | --- | --- |
-| Opens to the viewer; default screen ਸਤਿ ਸ੍ਰੀ ਅਕਾਲ, with `continue reading` after a journey ends | [reading-shell.md](../docs/requirements/reading-shell.md#the-default-screen) | **Same requirement.** Today it opens to the bani list. |
-| Journey ends after 15 minutes without activity, open or in the background; held in memory only | [journeys.md](../docs/requirements/journeys.md#journeys) | **Same requirement.** |
-| Journeys sidebar beneath the viewer; the viewer slides aside leaving a 72pt edge that returns to it; the sidebar fades in (40% → full at half the slide) and zooms (95% → full) | [reading-shell.md](../docs/requirements/reading-shell.md#getting-between-them) | **Same requirement.** The amounts are iOS constants (`ReaderShell`), first passes. |
-| Drag to open and close, anywhere including the edge | [interaction.md](../docs/interaction.md#notes-on-the-rows-that-are-not-obvious) | **Same requirement, own mechanism:** from inside the content only; the edges belong to system Back, which must also close the sidebar. |
-| One Journeys icon, unchanged when open; no toggle in the sidebar | [reading-shell.md](../docs/requirements/reading-shell.md#getting-between-them), [icons.md](../packages/design/icons.md) | **Same requirement.** `journeysActive` is gone from both generated icon files. |
-| Light haptic on opening, none on closing | [interaction.md](../docs/interaction.md#notes-on-the-rows-that-are-not-obvious) | **Same requirement, own mechanism.** |
-| Viewer's corners follow the display's while it slides | — | **Same requirement, own mechanism.** Android reports the display's rounded corners through `WindowInsets.getRoundedCorner` (API 31+). |
-| Sidebar colour: `backgroundBase` | [tokens.md](../packages/design/tokens.md#where-the-two-backgrounds-are-used) | **Own mechanism:** Material You's dynamic colour, role to confirm. |
-| Header and sidebar list fade under their bars | [interaction.md](../docs/interaction.md#notes-on-the-rows-that-are-not-obvious) | **Same requirement, own mechanism:** hand-built mask; already noted there. |
-| Title in a centred pill, inert until its actions exist | [reading-shell.md](../docs/requirements/reading-shell.md#the-viewer) | **Same requirement.** Today the title is plain text at the left. |
-| Header has no background; A−/A+ removed | [display-controls.md](../docs/requirements/display-controls.md#zoom) | **Same requirement** (decided 2026-10-16): Android removes A± and its bar's background. Pinch is the only way to resize until the Controls sidebar's slider exists. |
-| A tapped line scrolls to the top in 0.5s, no overshoot; the confirmation holds 0.5s | [display-controls.md](../docs/requirements/display-controls.md#tap-a-line) | **Same requirement.** Android keeps its ripple as the confirmation. |
-| Default-screen pills: Jap Ji Sahib, Rehras Sahib, Kirtan Sohila (Ardas once bundled) | [library.md](../docs/requirements/library.md#base-collections) | **Same requirement.** Greeting 3.2× and pills 1.6× Body, Gurmukhi at `weightPrimary`; iOS constants for now, to move to `tokens.md` before Android builds it. |
-| Interface Gurmukhi at `uiGurmukhiRatio` (1.15) × Body, `weightPrimary`; Latin at Body | [tokens.md](../packages/design/tokens.md#type) | **Same requirement.** The token is generated for both; Android's list still uses `listSize`. |
-| Bani list in Gurmukhi only | — | **Same requirement.** Android still shows the Latin name under each. |
+| Opens to the viewer; default screen ਸਤਿ ਸ੍ਰੀ ਅਕਾਲ, with `continue reading` | [reading-shell.md](../docs/requirements/reading-shell.md#the-default-screen) | **Done.** |
+| `continue reading` for a daily bani read in the last 8 hours, even after a force close; sehaj paath's 2 weeks not built | [reading-shell.md](../docs/requirements/reading-shell.md#how-long-continue-reading-is-offered) | **Done on both** (2026-10-16). Saved as `lastReadId`/`lastReadAt` on both. |
+| Journey ends after 15 minutes without activity, open or in the background; held in memory only | [journeys.md](../docs/requirements/journeys.md#journeys) | **Done.** Process memory: configuration changes keep it, process death is a new journey ([android/README.md](android/README.md#reading-shell)). |
+| Journeys sidebar beneath the viewer; 72pt/dp edge returns to it; fades 40% → full at half the slide, zooms 95% → full; as wide in landscape as in portrait | [reading-shell.md](../docs/requirements/reading-shell.md#four-surfaces-one-of-them-always-visible) | **Done.** The amounts are first passes, the same on both. The landscape width is the short side less the peek, plus a left cutout's inset, on both since 2026-10-19 (`Sidebar.travel`, `ReaderShell.travel`). |
+| Drag to open and close | [interaction.md](../docs/interaction.md#notes-on-the-rows-that-are-not-obvious) | **Done, own mechanism:** from inside the content only; system Back closes the sidebar. |
+| One Journeys icon, unchanged when open; no toggle in the sidebar | [reading-shell.md](../docs/requirements/reading-shell.md#getting-between-them), [icons.md](../packages/design/icons.md) | **Done.** `ic_journeys`, Material Symbol `conversion_path`. |
+| Light haptic on opening, none on closing | [interaction.md](../docs/interaction.md#notes-on-the-rows-that-are-not-obvious) | **Done, own mechanism:** `CONTEXT_CLICK`. |
+| Viewer's corners follow the display's while it slides | — | **Done, own mechanism:** `WindowInsets.getRoundedCorner`. |
+| Sidebar colour: `backgroundBase` | [tokens.md](../packages/design/tokens.md#where-the-two-backgrounds-are-used) | **Done.** No Material You dynamic colour anywhere (decided 2026-10-16). The viewer's controls are `backgroundBase` too; iOS uses glass. |
+| Header and sidebar list fade under their bars | [interaction.md](../docs/interaction.md#notes-on-the-rows-that-are-not-obvious) | **Done, own mechanism:** a hand-built `DstIn` mask (`fadingUnder`). |
+| Title in a centred pill, inert until its actions exist | [reading-shell.md](../docs/requirements/reading-shell.md#the-viewer) | **Done.** |
+| Header has no background; A−/A+ removed | [display-controls.md](../docs/requirements/display-controls.md#zoom) | **Done.** |
+| A tapped line scrolls to the top in 0.5s, no overshoot; the first row never scrolls | [display-controls.md](../docs/requirements/display-controls.md#tap-a-line) | **Done.** A tween by the row's measured offset; the ripple is the confirmation. |
+| Default-screen pills: Jap Ji Sahib, Rehras Sahib, Kirtan Sohila (Ardas once bundled); greeting `greetingRatio` and pills `pillRatio` × Body | [library.md](../docs/requirements/library.md#base-collections), [tokens.md](../packages/design/tokens.md#type) | **Done.** The ratios are generated tokens on both since 2026-10-16. |
+| Interface Gurmukhi at `uiGurmukhiRatio` × Body, `weightPrimary`; Latin at Body | [tokens.md](../packages/design/tokens.md#type) | **Done.** Android's Body is `androidBodySize` sp. |
+| Bani list in Gurmukhi only | — | **Done.** |
 | Rehras listed without (ਸ:) | — | **Done on both:** it comes from the bundled export. |
 | Lucide icons follow Text Size (`ScaledLucide`) | [icons.md](../packages/design/icons.md#lucide-assets) | **To decide.** Android icons are sized in dp and do not follow font scale, which is the platform norm. |
-| A tap scrolls to an offset, not a row id | — | **iOS only.** It works around SwiftUI keeping an animated scroll's target. |
-| Sidebar built without `NavigationStack`/`List`; viewer moved with `visualEffect` | — | **iOS only.** SwiftUI findings; [ios/README.md](ios/README.md#state-of-play). |
+| A tap scrolls to an offset, not a row id | — | **iOS only.** It works around SwiftUI keeping an animated scroll's target. Android scrolls by offset for a different reason: a duration. |
+| Sidebar and viewer header built without `NavigationStack`/`List`; viewer moved with `visualEffect` | — | **iOS only.** SwiftUI findings; [ios/README.md](ios/README.md#state-of-play). Android's equivalent, laying the sidebar out at full size and scaling only its drawing, is in [android/README.md](android/README.md#reading-shell). |
 
 **iOS 0.3.0 (72) was submitted to App Store review on 2026-10-11**
 ([ios/README.md](ios/README.md#state-of-play)).
@@ -230,8 +227,8 @@ once** ([display-controls.md](../docs/requirements/display-controls.md#starting-
 Pauses, pronunciations and ratio are persisted on both too, under the same keys
 (`pauses`, `pronDevanagari`, `pronLatin`, `ratio`); Android since 2026-10-15.
 Android has no Ratio control yet, so it only reads that one. Android also keeps the
-open bani and the scroll position across rotation, theme and font size changes,
-and process death ([android/README.md](android/README.md#reader-state-across-recreation)).
+open bani and the scroll position across rotation, theme and font size changes; process
+death is a new journey, as on iOS ([android/README.md](android/README.md#reader-state-across-recreation)).
 iOS keeps the line being read at the top through a rotation (verified on an iPhone
 2026-10-15; [ios/README.md](ios/README.md#state-of-play)).
 

@@ -2,6 +2,4 @@
 <resources>
     <string name="app_name">Shabad OS</string>
     <string name="nitnem">Nitnem</string>
-    <string name="text_smaller">Smaller text</string>
-    <string name="text_larger">Larger text</string>
 </resources>

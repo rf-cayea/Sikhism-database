@@ -1,28 +1,46 @@
 package com.shabados.android
 
-import android.content.res.AssetManager
+import android.content.Context
 import android.os.Bundle
+import android.os.SystemClock
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.Font
-import androidx.compose.ui.text.font.FontFamily
+import java.util.UUID
 
 /**
- * Sant Lipi is bundled rather than relying on system Gurmukhi fonts, whose coverage
- * of conjuncts and yayya variants is poor on both platforms.
+ * What is being read, held in **process memory only**
+ * (docs/requirements/journeys.md#journeys; journeys are not stored yet).
+ *
+ * In an `object` rather than saved instance state, so it lasts exactly as long as
+ * the process: rotation, a theme or Font size change, or the activity being
+ * destroyed while the process lives all bring the reader back; process death starts
+ * a new journey on the default screen, as an iOS cold launch does (decided
+ * 2026-10-16). Saved instance state would also survive process death.
  */
-private fun santLipi(assets: AssetManager) =
-  FontFamily(Font(path = "SantLipi-VF.ttf", assetManager = assets))
+private object Session {
+  /** `elapsedRealtime` for the idle boundary: it counts time asleep and does not
+   * jump when the clock is changed, so it measures real time away. The wall clock
+   * only for when something was read, which must outlive the process. */
+  lateinit var shell: ShellState
+
+  /** Once per process, from the first activity's context, for the saved last read. */
+  fun start(context: Context) {
+    if (::shell.isInitialized) return
+    shell = ShellState(
+      now = SystemClock::elapsedRealtime,
+      wallNow = System::currentTimeMillis,
+      store = context.lastReadStore(),
+    )
+  }
+
+  /** New in every process. Keys the reader so that its saved scroll state, which
+   * does survive process death, is never restored into a reader opened afterwards. */
+  val readerKey: String = UUID.randomUUID().toString()
+}
 
 class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -31,28 +49,28 @@ class MainActivity : ComponentActivity() {
     // (docs/requirements/display-controls.md#starting-size). Does nothing once a
     // size is saved.
     ReaderSize.saveStartingSizeOnce(readerSizeStore(), resources.configuration.isTablet) { resources.bodyDp() }
+    Session.start(applicationContext)
     enableEdgeToEdge()
     setContent {
-      ShabadOSTheme(dark = isSystemInDarkTheme()) { App() }
+      ShabadOSTheme(dark = isSystemInDarkTheme()) {
+        val assets = LocalContext.current.assets
+        val banis = remember { Corpus.load(assets) }
+        ReaderShell(Session.shell, Session.readerKey, banis)
+      }
     }
   }
-}
 
-@Composable
-private fun App() {
-  val assets = LocalContext.current.assets
-  val banis = remember { Corpus.load(assets) }
-  val gurmukhi = remember { santLipi(assets) }
-  // Saveable, so rotation, a theme or font size change, and process death (all of
-  // which recreate the activity) leave the reader open. By id: a Bani is not
-  // Parcelable, and the id is stable across corpus versions.
-  var openId by rememberSaveable { mutableStateOf<String?>(null) }
+  /** A journey can end while the app is in the background; coming back checks at
+   * once, before the reader is seen, rather than at the next periodic check. */
+  override fun onStart() {
+    super.onStart()
+    Session.shell.refresh()
+  }
 
-  val current = banis.withId(openId)
-  if (current == null) {
-    BaniList(banis, gurmukhi) { openId = it.id }
-  } else {
-    BackHandler { openId = null }
-    BaniReader(current) { openId = null }
+  /** The process can be killed once the app is out of sight, so what was being read
+   * is saved now, for `continue reading` after a force close. */
+  override fun onStop() {
+    super.onStop()
+    Session.shell.saveLastRead()
   }
 }

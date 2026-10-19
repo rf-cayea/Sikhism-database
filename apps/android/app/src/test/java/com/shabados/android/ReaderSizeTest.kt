@@ -56,7 +56,7 @@ class ReaderSizeTest {
     assertEquals(DesignTokens.DEFAULT_SIZE, store.value)
   }
 
-  @Test fun `a size set by pinch or A± is never overwritten`() {
+  @Test fun `a pinched size is never overwritten`() {
     val store = FakeStore(61.5f)
     ReaderSize.saveStartingSizeOnce(store, isTablet = false) { error("must not be asked for the body size") }
     assertEquals(61.5f, store.value)

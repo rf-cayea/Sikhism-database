@@ -1,13 +1,17 @@
 package com.shabados.android
 
+import android.view.View
+import androidx.compose.ui.platform.LocalView
 import android.content.res.AssetManager
 import androidx.compose.animation.core.EaseOut
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculateZoom
@@ -17,17 +21,20 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 // matchParentSize needs no import -- it's a member of BoxScope, not a top-level
 // function, and resolves automatically inside a Box{} content lambda.
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -35,9 +42,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -63,8 +68,6 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.withStyle
@@ -75,8 +78,8 @@ import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextMotion
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Job
@@ -91,7 +94,7 @@ import kotlin.math.roundToInt
  * equivalent of `Fonts.variable(_:size:weight:)` on iOS. Callers `remember` the
  * result keyed on the weight so this isn't rebuilt every recomposition.
  */
-private fun gurmukhiFont(assets: AssetManager, weight: Int): FontFamily =
+internal fun gurmukhiFont(assets: AssetManager, weight: Int): FontFamily =
   FontFamily(
     Font(
       path = "SantLipi-VF.ttf",
@@ -137,7 +140,7 @@ private const val HIGHLIGHT_FADE_MS = 250
  *   not just during a pinch: switching on release could move line breaks, and with
  *   them the row the pinch just put back.
  *
- * Only reading text goes inside this; the toolbar and the Expand button keep following
+ * Only reading text goes inside this; the header and the Expand button keep following
  * the system setting like the rest of the platform's UI.
  */
 @Composable
@@ -473,9 +476,10 @@ private fun ContinuationCard(
  * `Serializable`, which depends on which Set implementation is behind it. */
 private val StringSetSaver = listSaver<Set<String>, String>(save = { it.toList() }, restore = { it.toSet() })
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** The reader: [bani] under the viewer's header, whose Journeys button calls
+ * [onJourneys]. */
 @Composable
-fun BaniReader(bani: Bani, onBack: () -> Unit) {
+fun BaniReader(bani: Bani, onJourneys: () -> Unit) {
   val context = LocalContext.current
   val fonts = remember(context.assets) { GurmukhiFonts(context.assets) }
   val isTablet = LocalConfiguration.current.isTablet
@@ -531,16 +535,44 @@ fun BaniReader(bani: Bani, onBack: () -> Unit) {
   // to find that row again. Keys are ReaderItem.id, stable for a given bani.
   val listState = rememberLazyListState()
   val scope = rememberCoroutineScope()
+  val view = LocalView.current
 
-  /** Scrolls the tapped row to the top. **No custom highlight here** — that was
-   * iOS's own answer to "confirm which line was tapped," built because
-   * SwiftUI's plain tap gestures have no feedback of their own. Android
-   * already has one: the default ripple every `clickable` gets, which is why
-   * neither this row's own `clickable` nor `ContinuationCard`'s suppresses it.
-   * Same requirement (docs/requirements/display-controls.md#tap-a-line), a
-   * platform-appropriate mechanism rather than a ported one. */
+  /**
+   * Scrolls the tapped row to the top in [TapScroll.DURATION_MS], easing in and out
+   * with no overshoot (docs/requirements/display-controls.md#tap-a-line); the first
+   * row never scrolls ([TapScroll.distance]).
+   *
+   * **`FastOutSlowInEasing`, not a curve without the ease-in**: starting at full
+   * speed was tried and felt worse (2026-10-19).
+   *
+   * **By the row's measured offset, not `animateScrollToItem`**, which has no
+   * duration or easing of its own. The tapped row is on screen, so its offset is
+   * exact. The offset is from where the content starts, below the header's
+   * padding, so the row lands just under the header.
+   *
+   * **No custom highlight**: the default ripple every `clickable` gets is the
+   * confirmation, which is why neither this row's own `clickable` nor
+   * `ContinuationCard`'s suppresses it. iOS flashes the toner instead, because
+   * SwiftUI's plain tap gestures have no feedback of their own
+   * (docs/interaction.md).
+   *
+   * **At the display's high frame rate.** A finger on the screen raises a Pixel 7a
+   * from 60Hz to 90Hz; this scroll runs after the finger lifts, so it ran at 60Hz
+   * and juddered beside the finger's own scrolling (2026-10-19, `dumpsys display`:
+   * `frameRateCategoryRate normal=60, high=90`). The view asks for the high
+   * category for the animation's length, then hands the choice back.
+   */
   fun tapLine(index: Int) {
-    scope.launch { listState.animateScrollToItem(index) }
+    val row = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index } ?: return
+    val distance = TapScroll.distance(index, row.offset.toFloat()) ?: return
+    scope.launch {
+      view.requestedFrameRate = View.REQUESTED_FRAME_RATE_CATEGORY_HIGH
+      try {
+        listState.animateScrollBy(distance, tween(TapScroll.DURATION_MS, easing = FastOutSlowInEasing))
+      } finally {
+        view.requestedFrameRate = View.REQUESTED_FRAME_RATE_CATEGORY_DEFAULT
+      }
+    }
   }
 
   /** The row a pinch is anchored to, by item key, drawn with a toner wash. A pinch
@@ -591,62 +623,18 @@ fun BaniReader(bani: Bani, onBack: () -> Unit) {
     }
   }
 
-  Scaffold(
-    topBar = {
-      TopAppBar(
-        // One line, ellipsised. At the largest Font size and Display size the
-        // actions leave the title a few characters' width, and wrapping broke it
-        // into a column of syllables that pushed the reader down the screen.
-        title = { Text(bani.latin, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-        // Icon buttons, not text, matching iOS: the text buttons scaled with Font
-        // size and at the largest Font and Display size left the title only "…".
-        // Icons are sized in dp and do not scale. R.drawable rather than
-        // AppIcons.back's string: a missing drawable is then a compile error, not
-        // a blank button. ToolbarIconsTest checks the names agree.
-        navigationIcon = {
-          IconButton(onClick = onBack) { Icon(painterResource(R.drawable.ic_back), contentDescription = "Back") }
-        },
-        actions = {
-          // Letters, not icons: "a" and "A", chosen by the author 2026-10-15. These
-          // two buttons go when the Controls sidebar lands, so they have no rows in
-          // packages/design/icons.md. Sized in dp, like the icons beside them,
-          // so the system Font size cannot widen them.
-          val letterSize = with(LocalDensity.current) { 20.dp.toSp() }
-          IconButton(onClick = { saveSize(DesignTokens.clamp(readerSize - 2f, isTablet)) }) {
-            Text("a", fontSize = letterSize, modifier = Modifier.clearAndSetSemantics { contentDescription = "Smaller" })
-          }
-          IconButton(onClick = { saveSize(DesignTokens.clamp(readerSize + 2f, isTablet)) }) {
-            Text("A", fontSize = letterSize, modifier = Modifier.clearAndSetSemantics { contentDescription = "Larger" })
-          }
-          var menuOpen by remember { mutableStateOf(false) }
-          IconButton(onClick = { menuOpen = true }) {
-            Icon(painterResource(R.drawable.ic_controls), contentDescription = "Controls")
-          }
-          DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-            DropdownMenuItem(
-              text = { Text("Pauses") },
-              trailingIcon = { Checkbox(checked = pauses, onCheckedChange = { savePauses(it) }) },
-              onClick = { savePauses(!pauses) },
-            )
-            DropdownMenuItem(
-              text = { Text(Pronunciation.DEVANAGARI.label) },
-              trailingIcon = { Checkbox(checked = pronDevanagari, onCheckedChange = { savePronDevanagari(it) }) },
-              onClick = { savePronDevanagari(!pronDevanagari) },
-            )
-            DropdownMenuItem(
-              text = { Text(Pronunciation.LATIN.label) },
-              trailingIcon = { Checkbox(checked = pronLatin, onCheckedChange = { savePronLatin(it) }) },
-              onClick = { savePronLatin(!pronLatin) },
-            )
-          }
-        },
-      )
-    }
-  ) { inset ->
+  val contentTop = viewerContentTop()
+  val statusBarTop = with(LocalDensity.current) { WindowInsets.statusBars.getTop(this).toDp() }
+  val bottomInset = with(LocalDensity.current) { WindowInsets.navigationBars.getBottom(this).toDp() }
+  val sides = sideSafeArea.asPaddingValues()
+
+  Box(Modifier.fillMaxSize()) {
     LazyColumn(
       state = listState,
       modifier = Modifier
         .fillMaxSize()
+        // Rows fade as they pass under the status bar and the header.
+        .fadingUnder(statusBar = statusBarTop, to = contentTop)
         .pointerInput(isTablet) {
           val spacingPx = RowSpacing.toPx()
           // **The Initial pass, and every event consumed once a second finger is
@@ -695,12 +683,14 @@ fun BaniReader(bani: Bani, onBack: () -> Unit) {
           }
         },
       contentPadding = PaddingValues(
-        top = inset.calculateTopPadding(),
-        bottom = inset.calculateBottomPadding(),
+        top = contentTop,
+        bottom = bottomInset,
         // The 16dp gutter, less the card's bleed, which each row adds back as
-        // padding inside its own rounded bounds (see ReaderRow).
-        start = 16.dp - ReaderCard.bleed,
-        end = 16.dp - ReaderCard.bleed,
+        // padding inside its own rounded bounds (see ReaderRow), inside the side
+        // safe area: clear of a cutout in landscape, and level with the header's
+        // buttons, which are inset the same way.
+        start = sides.calculateLeftPadding(LayoutDirection.Ltr) + 16.dp - ReaderCard.bleed,
+        end = sides.calculateRightPadding(LayoutDirection.Ltr) + 16.dp - ReaderCard.bleed,
       ),
     ) {
       itemsIndexed(items, key = { _, item -> item.id }) { index, item ->
@@ -737,6 +727,31 @@ fun BaniReader(bani: Bani, onBack: () -> Unit) {
               onExpand = { expandedContinuations = expandedContinuations + item.continuation.id },
             )
         }
+      }
+    }
+    ViewerHeader(title = bani.latin, onJourneys = onJourneys) {
+      // A stand-in for the Controls sidebar, which is not built. Sized in dp, so
+      // the system Font size cannot widen it.
+      var menuOpen by remember { mutableStateOf(false) }
+      IconButton(onClick = { menuOpen = true }, colors = chromeIconButtonColors()) {
+        Icon(painterResource(R.drawable.ic_controls), contentDescription = "Controls")
+      }
+      DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+        DropdownMenuItem(
+          text = { Text("Pauses") },
+          trailingIcon = { Checkbox(checked = pauses, onCheckedChange = { savePauses(it) }) },
+          onClick = { savePauses(!pauses) },
+        )
+        DropdownMenuItem(
+          text = { Text(Pronunciation.DEVANAGARI.label) },
+          trailingIcon = { Checkbox(checked = pronDevanagari, onCheckedChange = { savePronDevanagari(it) }) },
+          onClick = { savePronDevanagari(!pronDevanagari) },
+        )
+        DropdownMenuItem(
+          text = { Text(Pronunciation.LATIN.label) },
+          trailingIcon = { Checkbox(checked = pronLatin, onCheckedChange = { savePronLatin(it) }) },
+          onClick = { savePronLatin(!pronLatin) },
+        )
       }
     }
   }

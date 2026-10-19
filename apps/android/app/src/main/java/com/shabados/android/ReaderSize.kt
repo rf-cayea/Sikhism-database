@@ -21,7 +21,7 @@ object ReaderSize {
   /**
    * Saves the starting size if no size is saved yet. **Written once, never
    * recomputed**: changing the system Font size later does not move the reader, and a
-   * size set by pinch or A± is never overwritten. [bodyDp] is asked for only when it
+   * size set by pinch is never overwritten. [bodyDp] is asked for only when it
    * is needed.
    */
   fun saveStartingSizeOnce(store: SizeStore, isTablet: Boolean, bodyDp: () -> Float) {
