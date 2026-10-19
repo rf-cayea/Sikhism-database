@@ -1,5 +1,8 @@
 package com.shabados.android
 
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import android.view.View
 import androidx.compose.ui.platform.LocalView
 import android.content.res.AssetManager
@@ -477,9 +480,11 @@ private fun ContinuationCard(
 private val StringSetSaver = listSaver<Set<String>, String>(save = { it.toList() }, restore = { it.toSet() })
 
 /** The reader: [bani] under the viewer's header, whose Journeys button calls
- * [onJourneys]. */
+ * [onJourneys]. It opens with [startLine] at the top (`continue reading`; null for
+ * the top of the bani) and reports the line at the top as it scrolls ([onTopLine]),
+ * both by `ReaderItem.id`. */
 @Composable
-fun BaniReader(bani: Bani, onJourneys: () -> Unit) {
+fun BaniReader(bani: Bani, startLine: String?, onTopLine: (String) -> Unit, onJourneys: () -> Unit) {
   val context = LocalContext.current
   val fonts = remember(context.assets) { GurmukhiFonts(context.assets) }
   val isTablet = LocalConfiguration.current.isTablet
@@ -532,8 +537,21 @@ fun BaniReader(bani: Bani, onJourneys: () -> Unit) {
   val items = remember(rawItems, expandedContinuations) { expand(rawItems, expandedContinuations) }
 
   // Saves the first visible row's index and offset, and its key, which the list uses
-  // to find that row again. Keys are ReaderItem.id, stable for a given bani.
-  val listState = rememberLazyListState()
+  // to find that row again. Keys are ReaderItem.id, stable for a given bani. The
+  // starting index applies only to a new reader: a recreated one restores its own.
+  // A start line inside a collapsed continuation is not in the list and is skipped.
+  val listState = rememberLazyListState(
+    initialFirstVisibleItemIndex = startLine?.let { id -> items.indexOfFirst { it.id == id } }?.takeIf { it >= 0 } ?: 0,
+  )
+  // The first visible item is the one at the top of the content, just below the
+  // header, which is where `continue reading` puts it back.
+  val currentItems by rememberUpdatedState(items)
+  val currentOnTopLine by rememberUpdatedState(onTopLine)
+  LaunchedEffect(listState) {
+    snapshotFlow { listState.firstVisibleItemIndex }.collect { index ->
+      currentItems.getOrNull(index)?.let { currentOnTopLine(it.id) }
+    }
+  }
   val scope = rememberCoroutineScope()
   val view = LocalView.current
 

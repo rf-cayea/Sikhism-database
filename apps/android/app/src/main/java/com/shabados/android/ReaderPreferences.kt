@@ -31,21 +31,24 @@ class PreferencesSizeStore(private val prefs: SharedPreferences) : SizeStore {
 
 /**
  * The bani last read and when, for `continue reading` after the process is gone
- * (ContinueReading in Shell.kt). Keys `lastReadId` and `lastReadAt`, the time in
- * wall-clock milliseconds; iOS uses the same key names in UserDefaults, with a Date.
+ * (ContinueReading in Shell.kt). Keys `lastReadId`, `lastReadAt` (the time in
+ * wall-clock milliseconds) and `lastReadLine` (the line at the top); iOS uses the
+ * same key names in UserDefaults, with a Date.
  */
 class PreferencesLastReadStore(private val prefs: SharedPreferences) : LastReadStore {
   override fun get(): LastRead? {
     val id = prefs.getString(ID, null) ?: return null
     if (!prefs.contains(AT)) return null
-    return LastRead(id, prefs.getLong(AT, 0))
+    return LastRead(id, prefs.getLong(AT, 0), prefs.getString(LINE, null))
   }
 
-  override fun set(value: LastRead) = prefs.edit().putString(ID, value.id).putLong(AT, value.atMs).apply()
+  override fun set(value: LastRead) =
+    prefs.edit().putString(ID, value.id).putLong(AT, value.atMs).putString(LINE, value.line).apply()
 
   private companion object {
     const val ID = "lastReadId"
     const val AT = "lastReadAt"
+    const val LINE = "lastReadLine"
   }
 }
 

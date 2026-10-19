@@ -11,8 +11,11 @@ import kotlin.math.abs
 // breaks). ReaderShell.kt only measures and draws.
 
 /** The bani last read, and when, in wall-clock milliseconds: what `continue
- * reading` offers ([ContinueReading]). */
-data class LastRead(val id: String, val atMs: Long)
+ * reading` offers ([ContinueReading]). [line] is the line that was at the top, by
+ * `ReaderItem.id`, which `continue reading` returns to; null for the top of the bani.
+ * (docs/requirements/journeys.md: "End a journey, reopen it ⇒ the same tabs, each at
+ * the position it held".) */
+data class LastRead(val id: String, val atMs: Long, val line: String? = null)
 
 /** Where [LastRead] is saved: SharedPreferences in the app, a field in tests. */
 interface LastReadStore {
@@ -54,6 +57,16 @@ class ShellState(
   var journeysOpen by mutableStateOf(false)
     private set
 
+  /** The line the reader opens at, by `ReaderItem.id`: where `continue reading` left
+   * off, or null for the top. Read once, when a reader is created. */
+  var startLine: String? = null
+    private set
+
+  /** The line at the top of the reader now, reported as it scrolls. **A plain field,
+   * deliberately not observed**: it changes with every scroll and must not recompose
+   * anything. Saved with [LastRead]. */
+  var readingLine: String? = null
+
   /** **A plain field, deliberately not observed**: it is written on every touch,
    * and must not recompose anything. */
   private var lastActivity = now()
@@ -68,8 +81,21 @@ class ShellState(
   fun open(id: String) {
     touch()
     openId = id
+    startLine = null
+    readingLine = null
     journeysOpen = false
     store.set(LastRead(id, wallNow()))
+  }
+
+  /** `continue reading`: opens [previous] at the line that was at its top. */
+  fun resume() {
+    val read = previous ?: return
+    touch()
+    openId = read.id
+    startLine = read.line
+    readingLine = read.line
+    journeysOpen = false
+    store.set(read.copy(atMs = wallNow()))
   }
 
   /** When the open bani was last read, on the wall clock: the last activity, which
@@ -81,7 +107,7 @@ class ShellState(
    * touch, which would write storage many times a second. */
   fun saveLastRead() {
     val id = openId ?: return
-    store.set(LastRead(id, lastReadAt()))
+    store.set(LastRead(id, lastReadAt(), readingLine))
   }
 
   /**
@@ -120,7 +146,7 @@ class ShellState(
     previous?.let { if (!ContinueReading.offers(it, wallNow())) previous = null }
     if (now() - lastActivity < IDLE_LIMIT_MS) return
     val id = openId ?: return
-    val read = LastRead(id, lastReadAt())
+    val read = LastRead(id, lastReadAt(), readingLine)
     store.set(read)
     previous = read.takeIf { ContinueReading.offers(it, wallNow()) }
     openId = null

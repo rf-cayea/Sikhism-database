@@ -211,6 +211,11 @@ struct BaniReaderView: View {
   let activity: ActivityClock
   /// Set for the length of a pinch, so `ReaderShell`'s sidebar drag stands aside.
   let pinch: PinchFlag
+  /// Told the line at the top as it changes (`topLine`), for `continue reading`.
+  let position: ReadingPosition
+  /// The line to open at, by `ReaderItem.id`: where `continue reading` left off, or
+  /// nil for the top of the bani.
+  let startLine: String?
   /// The header's Journeys button; `ReaderShell` opens or closes the sidebar.
   let onJourneys: () -> Void
 
@@ -401,6 +406,16 @@ struct BaniReaderView: View {
           if phase == .interacting { activity.touch() }
         }
         .coordinateSpace(name: Self.space)
+        // `continue reading` opens at the line that was at the top, as a rotation
+        // puts it back (`holdOrRestore`). Deferred so the rows have laid out. A
+        // line inside a collapsed continuation is not in the list and is skipped.
+        .onAppear {
+          guard let startLine,
+            Self.expanded(bani.items, expandedContinuations).contains(where: { $0.id == startLine })
+          else { return }
+          heldRow.id = startLine
+          DispatchQueue.main.async { proxy.scrollTo(startLine, anchor: .top) }
+        }
         // Keeps the line being read through a rotation; see `holdOrRestore`.
         .onScrollGeometryChange(for: ScrollSample.self) {
           ScrollSample(offsetY: $0.contentOffset.y, insetTop: $0.contentInsets.top, width: $0.containerSize.width)
@@ -645,7 +660,10 @@ struct BaniReaderView: View {
     let width = sample.width
     DispatchQueue.main.async {
       guard heldRow.width == width, !heldRow.restoring else { return }
-      if let id = Self.topLine(in: rowFrames) { heldRow.id = id }
+      if let id = Self.topLine(in: rowFrames) {
+        heldRow.id = id
+        position.line = id
+      }
     }
   }
 

@@ -145,6 +145,40 @@ class ShellTest {
     assertEquals(wall - 15 * minute, store.value?.atMs)
   }
 
+  // ---------------------------------------------------------------- reading position
+  // journeys.md: "End a journey, reopen it ⇒ the same tabs, each at the position it held"
+
+  @Test fun `continue reading returns to the line that was at the top`() {
+    val shell = shell()
+    shell.open("JAPJ")
+    shell.readingLine = "line-40"
+    clock += 15 * minute
+    shell.refresh()
+    assertEquals("line-40", store.value?.line)
+    shell.resume()
+    assertEquals("JAPJ", shell.openId)
+    assertEquals("line-40", shell.startLine)
+  }
+
+  @Test fun `the line survives the app being closed`() {
+    val first = shell()
+    first.open("JAPJ")
+    first.readingLine = "line-40"
+    first.saveLastRead() // the app leaves the screen
+    val second = shell() // a new process, reading what was saved
+    second.resume()
+    assertEquals("line-40", second.startLine)
+  }
+
+  @Test fun `opening a bani from a list starts at its top`() {
+    val shell = shell()
+    shell.open("JAPJ")
+    shell.readingLine = "line-40"
+    shell.open("RHRS")
+    assertNull(shell.startLine)
+    assertNull(shell.readingLine)
+  }
+
   // ---------------------------------------------------------------- screen awake
   // reading-shell.md#the-screen-stays-awake-while-content-is-read
 

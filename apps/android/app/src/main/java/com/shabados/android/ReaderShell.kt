@@ -284,6 +284,11 @@ fun ReaderShell(shell: ShellState, readerKey: Any, banis: List<Bani>) {
     scope.launch { slide.animateTo(0f, SlideSpec) }
   }
 
+  fun resume() {
+    shell.resume()
+    scope.launch { slide.animateTo(0f, SlideSpec) }
+  }
+
   BackHandler(enabled = shell.handlesBack) { setJourneys(open = false) }
 
   // Held awake while content is read (`ShellState.keepsScreenOn`). The flag is the
@@ -412,6 +417,7 @@ fun ReaderShell(shell: ShellState, readerKey: Any, banis: List<Bani>) {
           continueWith = banis.withId(shell.previousId),
           gurmukhi = gurmukhi,
           onOpen = ::open,
+          onContinue = ::resume,
           onJourneys = { setJourneys(!shell.journeysOpen) },
         )
       } else {
@@ -419,7 +425,12 @@ fun ReaderShell(shell: ShellState, readerKey: Any, banis: List<Bani>) {
         // process: [readerKey] is new each process, so saved scroll state from
         // before a process death is never restored into a later reader.
         key(readerKey, bani.id) {
-          BaniReader(bani, onJourneys = { setJourneys(!shell.journeysOpen) })
+          BaniReader(
+            bani,
+            startLine = shell.startLine,
+            onTopLine = { shell.readingLine = it },
+            onJourneys = { setJourneys(!shell.journeysOpen) },
+          )
         }
       }
     }
@@ -642,6 +653,7 @@ private fun DefaultScreen(
   continueWith: Bani?,
   gurmukhi: FontFamily,
   onOpen: (Bani) -> Unit,
+  onContinue: () -> Unit,
   onJourneys: () -> Unit,
 ) {
   val colors = MaterialTheme.colorScheme
@@ -690,7 +702,7 @@ private fun DefaultScreen(
           modifier = Modifier
             .clip(RoundedCornerShape(24.dp))
             .background(chromeColor())
-            .clickable { onOpen(continueWith) }
+            .clickable { onContinue() }
             .padding(horizontal = 24.dp, vertical = 10.dp),
         ) {
           Text("Continue reading", fontSize = BodySize, fontWeight = FontWeight.SemiBold, color = colors.primary)

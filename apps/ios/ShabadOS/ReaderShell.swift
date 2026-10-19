@@ -16,11 +16,17 @@ final class ActivityClock {
 /// **Saved, unlike the journey itself**, so a force close still offers it: a daily
 /// bani read less than `dailyWindow` ago, whether or not the app was closed since
 /// (decided 2026-10-16). One rule, so the answer does not depend on how the app was
-/// left. UserDefaults keys `lastReadId` and `lastReadAt` (a Date); Android uses the
-/// same names (`PreferencesLastReadStore`), with the time in milliseconds.
+/// left. UserDefaults keys `lastReadId`, `lastReadAt` (a Date) and `lastReadLine`;
+/// Android uses the same names (`PreferencesLastReadStore`), with the time in
+/// milliseconds.
+///
+/// `line` is the line that was at the top, by `ReaderItem.id`, which `continue
+/// reading` returns to; nil for the top of the bani (journeys.md: "End a journey,
+/// reopen it ⇒ the same tabs, each at the position it held").
 struct LastRead: Equatable {
   let id: String
   let at: Date
+  var line: String? = nil
 
   /// The seven bundled banis: Morning Nitnem's five, Rehras Sahib and Kirtan Sohila
   /// (library.md#base-collections), all read daily.
@@ -38,13 +44,22 @@ struct LastRead: Equatable {
     guard let id = defaults.string(forKey: "lastReadId"),
       let at = defaults.object(forKey: "lastReadAt") as? Date
     else { return nil }
-    return LastRead(id: id, at: at)
+    return LastRead(id: id, at: at, line: defaults.string(forKey: "lastReadLine"))
   }
 
   func save(in defaults: UserDefaults = .standard) {
     defaults.set(id, forKey: "lastReadId")
     defaults.set(at, forKey: "lastReadAt")
+    defaults.set(line, forKey: "lastReadLine")
   }
+}
+
+/// The line at the top of the reader now, by `ReaderItem.id`, saved with `LastRead`.
+///
+/// **A plain class, deliberately not observed**, like `ActivityClock`: the reader
+/// writes it on every scroll, and it must not re-render anything.
+final class ReadingPosition {
+  var line: String?
 }
 
 /// Whether the reader's pinch is in progress, so the sidebar drag can stand aside
@@ -86,6 +101,11 @@ struct ReaderShell: View {
   @State private var activity = ActivityClock()
   /// `@State` only to keep one instance for the view's lifetime.
   @State private var pinch = PinchFlag()
+  /// `@State` only to keep one instance for the view's lifetime.
+  @State private var position = ReadingPosition()
+  /// The line a new reader opens at: where `continue reading` left off, or nil for
+  /// the top.
+  @State private var startLine: String?
   @Environment(\.scenePhase) private var scenePhase
 
   private enum DragAxis { case horizontal, other }
@@ -276,7 +296,7 @@ struct ReaderShell: View {
       if phase == .active { refresh() }
       // A suspended app can be closed without warning, so what was being read is
       // saved as it leaves the screen; not on every touch.
-      if phase == .background, let baniID { LastRead(id: baniID, at: activity.last).save() }
+      if phase == .background, let baniID { LastRead(id: baniID, at: activity.last, line: position.line).save() }
     }
   }
 
@@ -309,12 +329,16 @@ struct ReaderShell: View {
   @ViewBuilder
   private var viewer: some View {
     if let bani = Self.bani(baniID) {
-      BaniReaderView(bani: bani, activity: activity, pinch: pinch) { setJourneys(open: !journeysOpen) }
+      BaniReaderView(bani: bani, activity: activity, pinch: pinch, position: position, startLine: startLine) {
+        setJourneys(open: !journeysOpen)
+      }
         // A different bani is a new reader: its row frames, held line and
         // expanded continuations all belong to the bani they were read from.
         .id(bani.id)
     } else {
-      DefaultScreen(continueWith: Self.bani(previous?.id), open: open) { setJourneys(open: !journeysOpen) }
+      DefaultScreen(continueWith: Self.bani(previous?.id), open: open, onContinue: resume) {
+        setJourneys(open: !journeysOpen)
+      }
     }
   }
 
@@ -381,7 +405,20 @@ struct ReaderShell: View {
   private func open(_ bani: Bani) {
     activity.touch()
     baniID = bani.id
+    startLine = nil
+    position.line = nil
     LastRead(id: bani.id, at: activity.last).save()
+    withAnimation(.smooth) { journeysOpen = false }
+  }
+
+  /// `continue reading`: opens `previous` at the line that was at its top.
+  private func resume() {
+    guard let previous else { return }
+    activity.touch()
+    baniID = previous.id
+    startLine = previous.line
+    position.line = previous.line
+    LastRead(id: previous.id, at: activity.last, line: previous.line).save()
     withAnimation(.smooth) { journeysOpen = false }
   }
 
@@ -396,7 +433,7 @@ struct ReaderShell: View {
   /// What was being read becomes `continue reading`, timed from its last activity.
   private func endJourney() {
     guard let baniID else { return }
-    let read = LastRead(id: baniID, at: activity.last)
+    let read = LastRead(id: baniID, at: activity.last, line: position.line)
     read.save()
     previous = read.offered(now: .now) ? read : nil
     self.baniID = nil
@@ -507,6 +544,8 @@ extension View {
 private struct DefaultScreen: View {
   let continueWith: Bani?
   let open: (Bani) -> Void
+  /// `continue reading`, which returns to where the bani was left.
+  let onContinue: () -> Void
   let onJourneys: () -> Void
 
   /// The system's Body text size: 17pt at the default Text Size, following the
@@ -549,7 +588,7 @@ private struct DefaultScreen: View {
       // Absent, not disabled, when there is nothing to continue: "an empty or dead
       // control on a first launch is worse than nothing".
       if let bani = continueWith {
-        Button { open(bani) } label: {
+        Button(action: onContinue) {
           VStack(spacing: 2) {
             Text("Continue reading")
               .font(.headline)
