@@ -55,6 +55,9 @@ private enum ReaderCard {
   /// as wider than the text column without ever touching the screen edge.
   static let bleed: CGFloat = 8
   static let cornerRadius: CGFloat = 12
+  /// The reader's outer gutter: the system's default `.padding()`, named so the
+  /// space between a card and the screen's edge (`gutter - bleed`) can be reused.
+  static let gutter: CGFloat = 16
 }
 
 private extension View {
@@ -208,6 +211,8 @@ struct BaniReaderView: View {
   let activity: ActivityClock
   /// Set for the length of a pinch, so `ReaderShell`'s sidebar drag stands aside.
   let pinch: PinchFlag
+  /// The header's Journeys button; `ReaderShell` opens or closes the sidebar.
+  let onJourneys: () -> Void
 
   // fileprivate, not private: `ContinuationBlock` (a separate type in this
   // same file) needs it too, to report its Expand button's frame into the
@@ -375,7 +380,7 @@ struct BaniReaderView: View {
                 )
             }
           }
-          .padding()
+          .padding(ReaderCard.gutter)
           // See its own doc comment — this exists so a stray tap on the
           // status bar can never silently discard however far into a long
           // bani someone has read
@@ -383,12 +388,15 @@ struct BaniReaderView: View {
           .background(ScrollsToTopDisabler())
         }
         .scrollPosition($scrollPosition)
-        // The bar has no background (see `.toolbarBackgroundVisibility` below), so
-        // this is all that sits behind its buttons: the text fades and blurs as it
-        // passes under them rather than being cut, which interaction.md requires.
-        // `.soft` is iOS 26's gradient fade; `.hard` is a sharper band, and
-        // `.automatic` leaves the choice to the system.
-        .scrollEdgeEffectStyle(.soft, for: .top)
+        // The bar has no background (`ViewerBar`), so this is all that sits behind
+        // its buttons: the text is covered as it passes under them rather than
+        // simply cut, which interaction.md requires.
+        //
+        // **`.hard`, not `.soft`** (chosen 2026-10-19), here and under the
+        // sidebar's header. `.soft` is a gradient blur that runs on past the bar
+        // by a fixed amount iOS does not let us set, about 24pt, so a tapped line
+        // landed partly blurred. `.hard` is a band that ends at the bar's edge.
+        .scrollEdgeEffectStyle(.hard, for: .top)
         .onScrollPhaseChange { _, phase in
           if phase == .interacting { activity.touch() }
         }
@@ -408,27 +416,10 @@ struct BaniReaderView: View {
       .onChange(of: viewport.size.height) { _, height in viewportHeight = height }
     }
     .background(DesignTokens.background)
-    .navigationTitle(bani.latin)
-    .navigationBarTitleDisplayMode(.inline)
     // No bar background: the text scrolls up under the buttons, with nothing
     // blurred or tinted behind them.
-    .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
-    .toolbar {
-      // The title is a control (docs/requirements/reading-shell.md#the-viewer),
-      // drawn as its own glass pill. The actions that hang off it do not exist
-      // yet, so it does nothing when tapped.
-      ToolbarItem(placement: .principal) {
-        Button {} label: {
-          Text(bani.latin)
-            .font(.headline)
-            .lineLimit(1)
-        }
-        .buttonStyle(.glass)
-      }
-      .sharedBackgroundVisibility(.hidden)
-      ToolbarItem(placement: .topBarTrailing) {
-        controlsStandIn
-      }
+    .safeAreaBar(edge: .top) {
+      ViewerBar(title: bani.latin, onJourneys: onJourneys) { controlsStandIn }
     }
   }
 
@@ -527,6 +518,10 @@ struct BaniReaderView: View {
   ///
   /// `.smooth`, a spring without bounce, at its default 0.5s (chosen on an iPhone,
   /// 2026-10-15, over a 0.4s spring).
+  /// How far below the bar a tapped line's highlight lands: the same space it
+  /// keeps from the screen's sides (chosen 2026-10-19).
+  static let tapLandingGap: CGFloat = ReaderCard.gutter - ReaderCard.bleed
+
   private func tapLine(_ item: ReaderItem, proxy: ScrollViewProxy, scroll: Bool = true) {
     activity.touch()
     // Instant, not animated — the highlight should already be visibly on
@@ -547,8 +542,14 @@ struct BaniReaderView: View {
           return
         }
         let sample = latestScroll.sample
+        // Less `bleed`, so the highlight's top lands below the bar, not the
+        // row's own top: the highlight reaches `bleed` above the row, and landed
+        // the row itself under the header's buttons (2026-10-19). Less
+        // `tapLandingGap` too, so it lands that far below the bar.
         withAnimation(.smooth(duration: 0.5)) {
-          scrollPosition.scrollTo(y: sample.offsetY + sample.insetTop + frame.minY)
+          scrollPosition.scrollTo(
+            y: sample.offsetY + sample.insetTop + frame.minY - ReaderCard.bleed - Self.tapLandingGap
+          )
         }
       }
     }
@@ -574,6 +575,10 @@ struct BaniReaderView: View {
     } label: {
       ScaledLucide(AppIcons.controls)
     }
+    // A glass circle, as the Journeys button is (`ViewerBar`).
+    .menuStyle(.button)
+    .barCircle()
+    .accessibilityLabel("Controls")
   }
 
   /// How strongly the size follows the fingers. The size changes by the pinch's

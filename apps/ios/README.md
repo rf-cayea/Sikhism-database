@@ -185,7 +185,7 @@ for now.
 [reading-shell.md](../../docs/requirements/reading-shell.md) is not yet read against
 this view), pause colouring (on by default), both pronunciation schemes as toggles
 (off by default, per the Variorum defaults), the Ratio control, and font sizing by
-toolbar buttons (2pt a tap) or a two-finger pinch. The starting size is chosen once,
+a two-finger pinch (the A−/A+ buttons were removed 2026-10-16). The starting size is chosen once,
 on first launch, from the device and its Text Size setting
 ([display-controls.md](../../docs/requirements/display-controls.md#starting-size)),
 and the zoom range is per device (16–88 iPhone, 16–132 iPad; both in
@@ -328,8 +328,12 @@ lines near the top and further down, with and without pronunciations:
 **The app opens to the viewer, with Journeys beneath it** (`ReaderShell.swift`).
 The Journeys sidebar is a stand-in: a Nitnem list under the specified header. A
 cold launch, and 15 minutes without activity, show the default screen (ਸਤਿ ਸ੍ਰੀ
-ਅਕਾਲ and pills); what is being read is held in memory only. Opening slides the
-viewer aside, leaving a 72pt edge that returns to it; a horizontal drag anywhere
+ਅਕਾਲ and pills); what is being read is held in memory only. What was last read is
+saved (`LastRead`, UserDefaults `lastReadId`/`lastReadAt`), so the default screen
+offers `continue reading` for a daily bani read in the last 8 hours, even after a
+force quit ([reading-shell.md](../../docs/requirements/reading-shell.md#how-long-continue-reading-is-offered)). Opening slides the
+viewer aside, leaving a 72pt edge that returns to it (more in landscape: the
+sidebar's width is the screen's short side less 72pt, `ReaderShell.travel`); a horizontal drag anywhere
 opens and closes it; opening gives a light haptic. Findings the code relies on:
 
 - **Nothing may clip to a layer's layout frame.** That frame stops at the safe
@@ -345,14 +349,60 @@ opens and closes it; opening gives a light haptic. Findings the code relies on:
 - **The sidebar is plain SwiftUI: no `NavigationStack`, no `List`.** It zooms from
   95% as the viewer slides, and the UIKit-backed containers answered the zoom by
   laying out again at the smaller size; at full size everything jumped and a row
-  appeared. Its header is a `safeAreaBar`, which keeps the soft fade.
+  appeared. Its header is a `safeAreaBar`, which keeps the scroll edge effect.
+- **The two layers ignore the safe area entirely; their contents take the measured
+  insets as fixed amounts.** An outer `GeometryReader` respects the safe area only to
+  read its insets. Inside, the sidebar and the viewer are each a card the size of the
+  screen: top and bottom as `safeAreaPadding` (so the reader still scrolls under the
+  status bar and header), sides as plain padding filled with the page colour.
+  **Nothing in a card may read the live safe area**: SwiftUI works it out from where a
+  view is on screen, and the viewer moves. That includes `.background(colour)` and
+  `.ignoresSafeArea()`, which reach into the safe area the same way: the card's fill,
+  wash, mask and hairline are plain views filling its frame (`.background { colour }`). Failed on an iPhone in landscape: reading
+  insets from a proxy that ignores the side safe area (it reports none);
+  `safeAreaPadding` on the viewer's `NavigationStack` from the window's insets (the
+  default screen stopped responding: taps did nothing and the viewer did not move,
+  though a drag's haptic fired; 2026-10-16); respecting the side safe area in the
+  shell (the inset changed as the viewer slid away from the Dynamic Island, so its
+  contents shifted and the text rewrapped; 2026-10-16); the viewer laid out in the
+  safe area with its page colour and mask reaching into the Island's strip by
+  ignoring it (once moved they fell back to the safe area's edge, so the card was a
+  strip short until dragged clear of the Island); and the viewer alone ignoring the
+  sides (its contents then overlapped the strip and stretched and jittered as it
+  slid; both 2026-10-19); and the layers ignoring the safe area with the viewer's
+  fill still `.background(colour)` and its mask `.ignoresSafeArea()` (the padding in
+  the Island's strip turned from page colour to the white sidebar once moved;
+  2026-10-19).
+- **The viewer's header is plain SwiftUI in a `safeAreaBar` (`ViewerBar`), not a
+  `NavigationStack` toolbar.** A navigation bar is UIKit, which works out its safe
+  area from where it sits on screen: in landscape, as the viewer slid aside, the part
+  going past the screen's edge counted as unsafe, so the Controls button stayed put,
+  the text rewrapped and the contents shifted inside the card (iPhone, 2026-10-16).
+  The `safeAreaBar` keeps the scroll edge effect, set to `.hard` under both headers
+  (2026-10-19): `.soft` blurs on about 24pt past the bar, by an amount iOS does not
+  expose, and a tapped line landed partly blurred.
+- **The header has fixed measurements (`BarMetrics`), and its frame holds
+  everything drawn in it.** 44pt glass circles and a 44pt title pill at the top of a
+  48pt bar (4pt beneath), flush under the status bar in portrait and 8pt below the
+  screen's edge in landscape (chosen 2026-10-19); the sidebar's header shares them,
+  so the logo is level with the Journeys button. A first pass copied the old
+  toolbar's 54pt bar with centred buttons and a 24pt landscape margin; both sat
+  too low. **Bars ignore Text Size** and offer the large content viewer, as iOS's
+  own do. The first version used `.controlSize(.large)` glass buttons in a fixed 44pt
+  frame (2026-10-19): they grew with Text Size and drew outside the frame, and since
+  the frame is what sets the safe area, the soft fade and the tapped line's landing
+  stopped short of the buttons, and the buttons sat too high in landscape.
+  **To verify on a device:** tap-to-scroll landing, the line kept through a rotation,
+  and the fade's depth, in both orientations and at an accessibility Text Size.
 - **A Lucide icon is drawn with `ScaledLucide`**, or it ignores Text Size.
 
 **Verified on an iPhone (2026-10-16):** rounded corners through the whole slide,
 the sidebar's fade and zoom with no jump, opening and closing by button, edge and
 drag. **Not yet checked:** a long-press text selection dragged sideways (nothing
 guards it from opening the sidebar), iPad (the sidebar is full screen there too,
-where the spec has it beside the viewer), and Android, which has none of this.
+where the spec has it beside the viewer), and `continue reading` after a force quit
+(added 2026-10-16). Android has the same shell since 2026-10-16
+([android/README.md](../android/README.md#reading-shell)).
 
 Reader font size, pauses, pronunciations and ratio are persisted on both
 platforms, under the same keys ([apps/README.md](../README.md#state-of-play)).

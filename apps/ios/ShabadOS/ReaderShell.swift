@@ -10,6 +10,43 @@ final class ActivityClock {
   func touch() { last = .now }
 }
 
+/// The bani last read and when: what the default screen's `continue reading`
+/// offers (docs/requirements/reading-shell.md#the-default-screen).
+///
+/// **Saved, unlike the journey itself**, so a force close still offers it: a daily
+/// bani read less than `dailyWindow` ago, whether or not the app was closed since
+/// (decided 2026-10-16). One rule, so the answer does not depend on how the app was
+/// left. UserDefaults keys `lastReadId` and `lastReadAt` (a Date); Android uses the
+/// same names (`PreferencesLastReadStore`), with the time in milliseconds.
+struct LastRead: Equatable {
+  let id: String
+  let at: Date
+
+  /// The seven bundled banis: Morning Nitnem's five, Rehras Sahib and Kirtan Sohila
+  /// (library.md#base-collections), all read daily.
+  static let dailyIDs: Set<String> = ["JAPJ", "JAAP", "TPSS", "BNCP", "ANND", "RHRS", "SHLA"]
+  static let dailyWindow: TimeInterval = 8 * 60 * 60
+
+  /// A time ahead of `now` (the clock was set back) is not offered: it cannot be
+  /// told how long ago it was.
+  func offered(now: Date) -> Bool {
+    let age = now.timeIntervalSince(at)
+    return Self.dailyIDs.contains(id) && age >= 0 && age < Self.dailyWindow
+  }
+
+  static func saved(in defaults: UserDefaults = .standard) -> LastRead? {
+    guard let id = defaults.string(forKey: "lastReadId"),
+      let at = defaults.object(forKey: "lastReadAt") as? Date
+    else { return nil }
+    return LastRead(id: id, at: at)
+  }
+
+  func save(in defaults: UserDefaults = .standard) {
+    defaults.set(id, forKey: "lastReadId")
+    defaults.set(at, forKey: "lastReadAt")
+  }
+}
+
 /// Whether the reader's pinch is in progress, so the sidebar drag can stand aside
 /// for it: two fingers spreading sideways would otherwise read as a drag.
 ///
@@ -23,21 +60,23 @@ final class PinchFlag {
 /// sidebar is never a destination of its own.
 ///
 /// **Opening Journeys slides the viewer aside** to show the sidebar beneath it,
-/// leaving `peek` of the viewer's inner edge in view, faded towards the
-/// background. Tapping that edge returns to the viewer. The sidebar does not move:
+/// leaving at least `peek` of the viewer's inner edge in view, faded towards the
+/// background; more in landscape, since the sidebar keeps its portrait width
+/// (`travel`). Tapping that edge returns to the viewer. The sidebar does not move:
 /// it starts washed in the page colour and comes up to full strength as the viewer
 /// moves away (`sidebarStrength`).
 ///
 /// **What is being read is held in memory only.** Journeys are not stored yet, so a
 /// cold launch, including after a force quit, is a new journey and shows the
 /// default screen. A journey also ends after `idleLimit` without activity, open or
-/// in the background (docs/requirements/journeys.md#journeys).
+/// in the background (docs/requirements/journeys.md#journeys). What was last read
+/// is saved, so the default screen can still offer it (`LastRead`).
 struct ReaderShell: View {
   /// The bani being read, by `Bani.id`; nil shows the default screen.
   @State private var baniID: String?
-  /// The bani of the journey that ended, offered by the default screen's
-  /// `continue reading`. Nil until a journey has ended since launch.
-  @State private var previousBaniID: String?
+  /// What the default screen's `continue reading` offers, while `LastRead` allows;
+  /// restored from what was saved when the app starts.
+  @State private var previous: LastRead? = LastRead.saved().flatMap { $0.offered(now: .now) ? $0 : nil }
   @State private var journeysOpen = false
   /// The drag's horizontal travel while it is moving the viewer; nil otherwise.
   @State private var dragX: CGFloat?
@@ -58,6 +97,18 @@ struct ReaderShell: View {
   /// How much of the viewer stays in view while Journeys is open. First pass,
   /// matched by eye to the sliver other apps leave (2026-10-15).
   private static let peek: CGFloat = 72
+
+  /// How far the viewer slides, which is also the sidebar's width: **the screen's
+  /// short side less `peek`, plus the inset at its leading edge**, so the sidebar's
+  /// contents are as wide in landscape as in portrait (decided 2026-10-16). In
+  /// landscape the viewer then leaves more than `peek` in view.
+  ///
+  /// The inset is the Dynamic Island's when it is on the left. The panel is padded
+  /// clear of it inside this width, so without adding it back the panel was that
+  /// much narrower in landscape (2026-10-19). In portrait it is 0.
+  static func travel(width: CGFloat, height: CGFloat, leadingInset: CGFloat) -> CGFloat {
+    max(0, min(width, height) - peek + leadingInset)
+  }
   /// How far a drag moves before it is judged horizontal or not. Below this a
   /// finger has not said which way it is going.
   private static let dragDecision: CGFloat = 12
@@ -84,8 +135,7 @@ struct ReaderShell: View {
 
   /// The sidebar's colour: `backgroundBase`, white in light mode and #222 in
   /// dark (chosen 2026-10-16), so it reads apart from the page-coloured viewer.
-  /// Android is to take Material You's dynamic colour here instead
-  /// (packages/design/tokens.md#colour).
+  /// Android uses the same token (packages/design/tokens.md#colour).
   fileprivate static let sidebarBackground = DesignTokens.backgroundBase
 
   /// The least corner radius the viewer keeps while it is moved; see `cardShape`.
@@ -98,22 +148,44 @@ struct ReaderShell: View {
   private let idleCheck = Timer.publish(every: 10, on: .main, in: .common).autoconnect()
 
   var body: some View {
+    // Respects the safe area, so its proxy reports the insets: the shell inside
+    // ignores the safe area, and a proxy there reports none.
     GeometryReader { geometry in
-      let travel = max(0, geometry.size.width - Self.peek)
+      // The whole screen. The layout stops at the safe area on every side (the
+      // Dynamic Island's in landscape); the screen does not.
+      let insets = geometry.safeAreaInsets
+      let screenWidth = geometry.size.width + insets.leading + insets.trailing
+      let screenHeight = geometry.size.height + insets.top + insets.bottom
+      let travel = Self.travel(width: screenWidth, height: screenHeight, leadingInset: insets.leading)
       let progress = openness(travel: travel)
       let sidebarScale = Self.sidebarScale(progress)
 
-      // Two whole screens, one over the other. Each is laid out in the safe area,
-      // as any screen is, and draws past it (under the bars) as any screen does.
-      // **Nothing here may clip to a layer's layout frame**: that frame stops at
-      // the safe area, so a clip there cuts the text off below the status bar and
-      // leaves a gap above the home indicator. Every overlay and mask that must
-      // cover a whole layer therefore ignores the safe area itself.
+      // Two whole screens, one over the other, each a rigid card the size of the
+      // display.
+      //
+      // **Neither sees the real safe area; each is given the insets measured
+      // above, as fixed amounts.** SwiftUI works out a view's safe area from where
+      // it is on screen, and the viewer moves: wherever it overlapped the Dynamic
+      // Island's strip, its inset changed as it slid, so the header stretched and
+      // the lines jittered mid-drag, or its page colour and mask, reaching into
+      // the strip by ignoring the safe area, fell back to the safe area's edge
+      // once moved, leaving the card a strip short (iPhone, landscape,
+      // 2026-10-19). Fixed insets do not depend on position, so the card slides as
+      // one piece.
+      //
+      // The top and bottom are safe-area padding, so the reader still scrolls
+      // under the status bar and its header; the sides are plain padding, filled
+      // with the page colour.
       ZStack(alignment: .leading) {
         // Beneath: the sidebar, on its own colour across the whole screen.
         ZStack(alignment: .leading) {
           Self.sidebarBackground.ignoresSafeArea()
           JourneysPanel(readingID: baniID, open: open)
+            // Clear of the Dynamic Island in landscape, by the measured inset.
+            // Inside the width, so the sidebar stays as wide.
+            .padding(.leading, insets.leading)
+            .safeAreaPadding(.top, insets.top)
+            .safeAreaPadding(.bottom, insets.bottom)
             // As wide as the viewer leaves uncovered, so nothing in it sits under the peek.
             .frame(width: travel)
             // Grows to full size as the viewer slides, outward from its right
@@ -139,27 +211,30 @@ struct ReaderShell: View {
             .allowsHitTesting(false)
         }
 
-        NavigationStack {
-          viewer
-            .toolbar {
-              ToolbarItem(placement: .topBarLeading) {
-                Button("Journeys", systemImage: AppIcons.journeys) { setJourneys(open: !journeysOpen) }
-              }
-            }
-        }
+        viewer
+        // The measured insets, fixed while the viewer moves (see above).
+        .safeAreaPadding(.top, insets.top)
+        .safeAreaPadding(.bottom, insets.bottom)
+        .padding(.leading, insets.leading)
+        .padding(.trailing, insets.trailing)
+        // **The fill, wash, mask and hairline are views filling the card's frame,
+        // with no safe-area behaviour of their own.** The frame is already the
+        // whole screen. `.background(_:)` with a colour, and `.ignoresSafeArea()`,
+        // both reach into the safe area by working out where it is on screen, so
+        // once the viewer moved they stopped short of the Dynamic Island's strip:
+        // the side padding there showed the white sidebar through, not the page
+        // colour, until dragged clear of the Island (iPhone, landscape, 2026-10-19).
+        .background { DesignTokens.background }
         .overlay {
           DesignTokens.background.opacity(0.6 * progress)
-            .ignoresSafeArea()
             .allowsHitTesting(false)
         }
-        // A mask that ignores the safe area, not `clipShape`, for the reason at the top.
-        .mask { cardShape(moved: progress > 0).ignoresSafeArea() }
+        .mask { cardShape(moved: progress > 0) }
         // A hairline along the viewer's edge, so it reads as a card's edge, not
         // only a shadow's.
         .overlay {
           cardShape(moved: progress > 0)
             .stroke(DesignTokens.foreground.opacity(0.08 * progress), lineWidth: 0.5)
-            .ignoresSafeArea()
             .allowsHitTesting(false)
         }
         .shadow(color: .black.opacity(0.18 * progress), radius: 24)
@@ -176,20 +251,27 @@ struct ReaderShell: View {
         if journeysOpen && dragX == nil {
           Color.clear
             .contentShape(Rectangle())
-            .frame(width: Self.peek)
+            // All of the viewer still in view: the peek in portrait, more in landscape.
+            .frame(width: max(0, screenWidth - travel))
             .frame(maxWidth: .infinity, alignment: .trailing)
             .ignoresSafeArea()
             .onTapGesture { setJourneys(open: false) }
         }
       }
       .simultaneousGesture(sidebarDrag(travel: travel))
+      // Both layers span the whole screen, so the viewer is one rigid card whose
+      // corners are the display's (`cardShape`). Their contents take the insets
+      // as fixed padding instead, above.
+      .ignoresSafeArea(.container)
     }
-    .ignoresSafeArea(.container, edges: .horizontal)
     // On opening only (chosen 2026-10-16).
     .sensoryFeedback(.impact(weight: .light), trigger: journeysOpen) { _, isOpen in isOpen }
-    .onReceive(idleCheck) { _ in endJourneyIfIdle() }
+    .onReceive(idleCheck) { _ in refresh() }
     .onChange(of: scenePhase) { _, phase in
-      if phase == .active { endJourneyIfIdle() }
+      if phase == .active { refresh() }
+      // A suspended app can be closed without warning, so what was being read is
+      // saved as it leaves the screen; not on every touch.
+      if phase == .background, let baniID { LastRead(id: baniID, at: activity.last).save() }
     }
   }
 
@@ -216,12 +298,12 @@ struct ReaderShell: View {
   @ViewBuilder
   private var viewer: some View {
     if let bani = Self.bani(baniID) {
-      BaniReaderView(bani: bani, activity: activity, pinch: pinch)
+      BaniReaderView(bani: bani, activity: activity, pinch: pinch) { setJourneys(open: !journeysOpen) }
         // A different bani is a new reader: its row frames, held line and
         // expanded continuations all belong to the bani they were read from.
         .id(bani.id)
     } else {
-      DefaultScreen(continueWith: Self.bani(previousBaniID), open: open)
+      DefaultScreen(continueWith: Self.bani(previous?.id), open: open) { setJourneys(open: !journeysOpen) }
     }
   }
 
@@ -288,18 +370,122 @@ struct ReaderShell: View {
   private func open(_ bani: Bani) {
     activity.touch()
     baniID = bani.id
+    LastRead(id: bani.id, at: activity.last).save()
     withAnimation(.smooth) { journeysOpen = false }
   }
 
-  private func endJourneyIfIdle() {
+  /// Withdraws `continue reading` once `LastRead` no longer allows it, so a default
+  /// screen left showing does not keep offering it, then ends the journey if idle.
+  private func refresh() {
+    if let previous, !previous.offered(now: .now) { self.previous = nil }
     guard Date.now.timeIntervalSince(activity.last) >= Self.idleLimit else { return }
     endJourney()
   }
 
+  /// What was being read becomes `continue reading`, timed from its last activity.
   private func endJourney() {
     guard let baniID else { return }
-    previousBaniID = baniID
+    let read = LastRead(id: baniID, at: activity.last)
+    read.save()
+    previous = read.offered(now: .now) ? read : nil
     self.baniID = nil
+  }
+}
+
+/// The viewer's header: the Journeys button at the left, the title in a centred
+/// glass pill, `trailing` at the right (docs/requirements/reading-shell.md#the-viewer).
+/// The title is a control, but its actions do not exist yet, so it does nothing.
+///
+/// **Plain SwiftUI in a `safeAreaBar`, not a `NavigationStack` toolbar.** A
+/// navigation bar is UIKit, which works out its safe area from where it sits on
+/// screen: as the viewer slid aside, the part going past the screen's edge counted
+/// as unsafe, so the trailing button stayed put, the text rewrapped and the
+/// contents shifted inside the card (iPhone, landscape, 2026-10-16). A
+/// `safeAreaBar` keeps the scroll edge effect beneath it, as the sidebar's header does.
+///
+/// **Laid out as a navigation bar is, so it behaves like one** (`BarMetrics`):
+/// fixed sizes that do not follow Text Size, and a frame that holds everything
+/// drawn in it. The bar's frame is what the reader measures from: the safe area
+/// beneath it, the edge effect's height, and the line a tap scrolls to the top
+/// (`BaniReaderView.tapLine`). Buttons that grew past a fixed frame drew outside
+/// it, so the fade and the tapped line stopped short of them (2026-10-19).
+struct ViewerBar<Trailing: View>: View {
+  let title: String?
+  let onJourneys: () -> Void
+  /// Styled by the caller with `barCircle()`, so an absent one draws nothing.
+  @ViewBuilder let trailing: Trailing
+
+  @Environment(\.verticalSizeClass) private var verticalSizeClass
+
+  var body: some View {
+    HStack {
+      Button(action: onJourneys) {
+        Image(systemName: AppIcons.journeys)
+          .imageScale(.large)
+      }
+      .accessibilityLabel("Journeys")
+      .barCircle()
+      Spacer(minLength: 0)
+      trailing
+    }
+    .overlay {
+      if let title {
+        Button {} label: {
+          Text(title)
+            .font(.headline)
+            .lineLimit(1)
+            .padding(.horizontal, 16)
+            .frame(height: BarMetrics.button)
+        }
+        .buttonStyle(.plain)
+        .contentShape(.capsule)
+        .glassEffect(.regular.interactive(), in: .capsule)
+        .accessibilityShowsLargeContentViewer()
+        // Clear of the buttons on both sides, so a long title truncates.
+        .padding(.horizontal, BarMetrics.button + 20)
+      }
+    }
+    .padding(.horizontal, 16)
+    .frame(height: BarMetrics.height, alignment: .top)
+    .padding(.top, BarMetrics.topMargin(verticalSizeClass))
+    .dynamicTypeSize(BarMetrics.typeSize)
+  }
+}
+
+/// The header's measurements, which `ViewerBar` and the sidebar's header share
+/// so the logo sits level with the Journeys button in either orientation.
+///
+/// **The buttons sit at the top of the bar, `below` beneath them** (chosen
+/// 2026-10-19, by eye on an iPhone): flush under the status bar in portrait, `8`
+/// from the screen's edge in landscape. A first pass copied the old navigation
+/// bar's 54pt with the buttons centred, and 24pt in landscape; both sat too low.
+enum BarMetrics {
+  /// The glass circle behind each button, and the title pill's height.
+  static let button: CGFloat = 44
+  /// The bar's space beneath its buttons: the same gap a tapped line's highlight
+  /// keeps from the bar, and from the screen's sides (chosen 2026-10-19).
+  static let below: CGFloat = BaniReaderView.tapLandingGap
+  static let height: CGFloat = button + below
+  /// iPhone in landscape only (a compact height); elsewhere the status bar's
+  /// safe area already sits above the bar.
+  static func topMargin(_ verticalSizeClass: UserInterfaceSizeClass?) -> CGFloat {
+    verticalSizeClass == .compact ? 8 : 0
+  }
+  /// **Bars do not follow Text Size**, as iOS's own do not: at the largest
+  /// accessibility sizes the buttons grew past a third of the screen (2026-10-19).
+  /// They stay at the default size, and a long press shows the large content
+  /// viewer instead, which is iOS's answer for bars.
+  static let typeSize: DynamicTypeSize = .large
+}
+
+extension View {
+  /// A header button: a 44pt glass circle, as a navigation bar's are on iOS 26.
+  func barCircle() -> some View {
+    buttonStyle(.plain)
+      .frame(width: BarMetrics.button, height: BarMetrics.button)
+      .contentShape(.circle)
+      .glassEffect(.regular.interactive(), in: .circle)
+      .accessibilityShowsLargeContentViewer()
   }
 }
 
@@ -310,13 +496,13 @@ struct ReaderShell: View {
 private struct DefaultScreen: View {
   let continueWith: Bani?
   let open: (Bani) -> Void
+  let onJourneys: () -> Void
 
   /// The system's Body text size: 17pt at the default Text Size, following the
   /// person's setting. The greeting and pills are sized from it, not from the
-  /// reader's size, so pinching the reader does not change them (chosen 2026-10-16).
+  /// reader's size, so pinching the reader does not change them
+  /// (`greetingRatio`, `pillRatio`: packages/design/tokens.md#type).
   @ScaledMetric(relativeTo: .body) private var uiSize: CGFloat = 17
-  private static let greetingScale: CGFloat = 3.2
-  private static let pillScale: CGFloat = 1.6
   /// Added to each side of a pill's text, beyond the glass button's own inset.
   /// First pass (2026-10-16).
   private static let pillPadding: CGFloat = 12
@@ -336,7 +522,7 @@ private struct DefaultScreen: View {
       Text("ਸਤਿ ਸ੍ਰੀ ਅਕਾਲ")
         .font(Fonts.variable(
           Fonts.gurmukhi,
-          size: uiSize * Self.greetingScale,
+          size: uiSize * DesignTokens.greetingRatio,
           weight: DesignTokens.weightPrimary
         ))
         .foregroundStyle(DesignTokens.foreground)
@@ -368,7 +554,8 @@ private struct DefaultScreen: View {
     .padding()
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(DesignTokens.background)
-    .navigationBarTitleDisplayMode(.inline)
+    // The Journeys button only: no title, since nothing is being read.
+    .safeAreaBar(edge: .top) { ViewerBar(title: nil, onJourneys: onJourneys) { EmptyView() } }
   }
 
   private var pillButtons: some View {
@@ -376,7 +563,7 @@ private struct DefaultScreen: View {
       // Gurmukhi in the greeting's weight and colour (chosen 2026-10-16).
       Button { open(bani) } label: {
         Text(bani.gurmukhi)
-          .font(Fonts.variable(Fonts.gurmukhi, size: uiSize * Self.pillScale, weight: DesignTokens.weightPrimary))
+          .font(Fonts.variable(Fonts.gurmukhi, size: uiSize * DesignTokens.pillRatio, weight: DesignTokens.weightPrimary))
           .foregroundStyle(DesignTokens.foreground)
           .padding(.horizontal, Self.pillPadding)
       }
@@ -401,7 +588,7 @@ private struct DefaultScreen: View {
 /// being drawn smaller: the text stayed full size while rows moved, and at full size
 /// everything jumped and a row that had not fitted appeared (iPhone, 2026-10-16).
 /// SwiftUI views are drawn scaled and never re-laid out. The header is a
-/// `safeAreaBar`, which keeps the soft fade beneath it that a navigation bar gave.
+/// `safeAreaBar`, which keeps the scroll edge effect beneath it that a navigation bar gave.
 private struct JourneysPanel: View {
   /// The bani the viewer is showing, drawn as selected.
   let readingID: String?
@@ -411,9 +598,8 @@ private struct JourneysPanel: View {
   /// the section label and every row's text, and the same on the right
   /// (chosen 2026-10-16).
   static let inset: CGFloat = 30
-  /// The header's height, a navigation bar's, so the name sits level with the
-  /// viewer's Journeys button beside it.
-  private static let headerHeight: CGFloat = 44
+
+  @Environment(\.verticalSizeClass) private var verticalSizeClass
 
   var body: some View {
     ScrollView {
@@ -431,7 +617,7 @@ private struct JourneysPanel: View {
     }
     // The list fades under the header rather than being cut
     // (reading-shell.md#header, interaction.md).
-    .scrollEdgeEffectStyle(.soft, for: .top)
+    .scrollEdgeEffectStyle(.hard, for: .top)
     .safeAreaBar(edge: .top) { header }
   }
 
@@ -449,6 +635,12 @@ private struct JourneysPanel: View {
         .foregroundStyle(DesignTokens.foreground)
     }
     .padding(.horizontal, Self.inset)
-    .frame(maxWidth: .infinity, minHeight: Self.headerHeight, alignment: .leading)
+    // Centred in a button's height, then the bar's space beneath, so the logo is
+    // level with the Journeys button.
+    .frame(maxWidth: .infinity, minHeight: BarMetrics.button, alignment: .leading)
+    .padding(.bottom, BarMetrics.below)
+    .padding(.top, BarMetrics.topMargin(verticalSizeClass))
+    // A bar, like the viewer's: it does not follow Text Size (`BarMetrics`).
+    .dynamicTypeSize(BarMetrics.typeSize)
   }
 }
