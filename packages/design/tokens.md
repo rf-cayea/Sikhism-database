@@ -48,14 +48,16 @@ web's custom properties too.
 ### Where the two backgrounds are used
 
 **`background` is the page**: the reader, and the default screen. **`backgroundBase`
-is what sits apart from it**: list cards, and the Journeys sidebar on iOS (white in
-light mode, `#222222` in dark; chosen 2026-10-16), so the sidebar reads as a
-separate surface beside the viewer's edge.
+is what sits apart from it**: list cards, and the Journeys sidebar on both platforms
+(white in light mode, `#222222` in dark; chosen 2026-10-16), so the sidebar reads as
+a separate surface beside the viewer's edge.
 
-**On Android the Journeys sidebar takes Material You's dynamic colour instead** of
-`backgroundBase`, so it follows the wallpaper the way the system's own drawers do.
-Material 3 gives a navigation drawer the `surfaceContainerLow` role; confirm the role
-when the Android sidebar is built. Not built yet.
+**Android uses the same two, and no Material You dynamic colour** (decided
+2026-10-16): the Journeys sidebar is `backgroundBase` as on iOS, and so are the
+viewer's controls (the default screen's pills and `continue reading`, the title pill,
+and a circle behind each header button), where iOS uses its glass buttons. Dynamic
+colour was tried for both and set them apart from the rest of the app: a wallpaper
+tint differs on every device, where these tokens match across platforms.
 
 ### The vishraam colours
 
@@ -134,8 +136,14 @@ reader default does not resize the list.
 size itself, and Gurmukhi at `uiGurmukhiRatio` × the Body size, at `weightPrimary`.
 Gurmukhi at the same point size as Latin reads smaller and fainter — its letters sit
 lower in the line box and its strokes are thinner — so it is set larger and heavier
-to read as the same size. The iOS Journeys sidebar uses this in place of `listSize`;
+to read as the same size. The Journeys sidebar uses this in place of `listSize`;
 the reader's own size is separate and set by pinch.
+
+**The default screen is sized from the Body size too**
+([reading-shell.md](../docs/requirements/reading-shell.md#the-default-screen)):
+the greeting ਸਤਿ ਸ੍ਰੀ ਅਕਾਲ at `greetingRatio` × Body and its pills at `pillRatio`
+× Body, both Gurmukhi at `weightPrimary` in the text colour (chosen 2026-10-16).
+Neither follows the reader's pinch size: the screen shows nothing being read.
 
 **The zoom range is per device** (2026-10-10). `minSize` applies everywhere.
 `phoneMaxSize` is the iPhone's maximum and `padMaxSize` the iPad's: an iPad's wider
@@ -151,6 +159,8 @@ tablet; folded, a phone.
 | defaultSize | `28` |
 | listSize | `20` |
 | uiGurmukhiRatio | `1.15` |
+| greetingRatio | `3.2` |
+| pillRatio | `1.6` |
 | lineHeightRatio | `1.6` |
 | minSize | `16` |
 | phoneMaxSize | `88` |

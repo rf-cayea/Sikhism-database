@@ -90,7 +90,7 @@ and Compose's `Icon` tints regardless. Pin the commit and record each copy here.
 
 | Material Symbol | Commit | Source | Licence | Copied to |
 | --- | --- | --- | --- | --- |
-| `arrow_back` | `6d7ca43bd6e6668531a00fcaca06d921b63dd716` (latest for that file on 2026-10-15) | `symbols/android/arrow_back/materialsymbolsoutlined/arrow_back_24px.xml` | Apache-2.0 | `apps/android/app/src/main/res/drawable/ic_back.xml` |
+| `conversion_path` | `6d7ca43bd6e6668531a00fcaca06d921b63dd716` (latest for that file on 2026-10-16) | `symbols/android/conversion_path/materialsymbolsoutlined/conversion_path_24px.xml` | Apache-2.0 | `apps/android/app/src/main/res/drawable/ic_journeys.xml` |
 
 ## Icons
 

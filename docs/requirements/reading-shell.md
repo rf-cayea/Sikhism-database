@@ -39,7 +39,11 @@ over it, never destinations in their own right.
 **On mobile the viewer slides aside to show the sidebar beneath it** (2026-10-15).
 The viewer lies over the sidebar; opening one moves the viewer towards the far side,
 leaving its inner edge in view, faded towards the background. Tapping that edge
-returns to the viewer. On wider surfaces (web, iPad) it behaves like claude.ai's
+returns to the viewer. **The sidebar is as wide in landscape as in portrait**
+(2026-10-16): its width comes from the screen's short side, so turning the device
+leaves more of the viewer in view rather than stretching the sidebar across it.
+The width is that of its contents, clear of a camera cutout at its edge: a cutout's
+inset is added to the sidebar, not taken from it (2026-10-19). On wider surfaces (web, iPad) it behaves like claude.ai's
 sidebar: a toggleable panel alongside the viewer rather than over it. The same
 states and the same controls; only the presentation of "open" differs.
 
@@ -151,6 +155,27 @@ It carries a **continue reading** affordance whose byline names the anchor of th
 most recent journey ([journeys.md](journeys.md#recents-and-inactive-sessions)) — "what it was on last
 open". If there is no previous journey, the greeting stands alone with no
 affordance; an empty or dead control on a first launch is worse than nothing.
+
+#### How long `continue reading` is offered
+
+**It depends on what was being read** (decided 2026-10-16). Different readings are
+picked up again over different spans, so one window cannot serve them all:
+
+| What was read | Offered for | Built |
+| --- | --- | --- |
+| **A daily bani**: Morning Nitnem's five, Rehras Sahib, Kirtan Sohila — every bani bundled today | **8 hours** since it was last read | iOS, Android |
+| **A sehaj paath** | **2 weeks** since it was last read | Not yet: needs bookmarks ([library.md](library.md#bookmarks)) |
+
+- **"Last read" is the last activity on it**, not when it was opened: someone who
+  read Rehras for forty minutes is measured from the end of those forty minutes.
+- **One rule, however the app was left.** The same window applies after a journey
+  ends by going idle, after the app is closed from the app switcher, and after the
+  system ends it in the background. The open journey itself is not saved yet, so a
+  closed app always opens to this screen; only what was last read is remembered.
+- **Beyond its window the affordance is absent**, as on a first launch, and it is
+  withdrawn from a screen left showing when its window passes.
+- **Anything else read** — not yet possible in the apps — is not offered until its
+  window is decided.
 
 #### What is due now
 
@@ -389,6 +414,9 @@ list, not a new one, is what should be presented.
   header's frame is unchanged.
 - **Inactive means inactive.** A journey at 13 days appears in the sidebar and not in
   `Inactive sessions`; at 15 days, the reverse. Neither list shows it twice.
+- **`continue reading` windows.** A daily bani last read 7h59m ago is offered and at
+  8h is not, including after the app is closed and reopened; a sehaj paath at 13
+  days is offered and at 14 is not.
 - **Empty states.** No journeys at all ⇒ the default screen shows the greeting with
   no `continue reading`; `Inactive sessions` renders an empty list without crashing.
 - **Long labels.** A renamed journey with a 200-character label must not break row
