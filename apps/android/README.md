@@ -110,8 +110,6 @@ works from a date it states.
 - **A shared core** — no session/search/navigation core on any platform yet
   ([ADR-0010](../../docs/architecture/decisions/0010-shared-core-across-platforms.md)
   Needs discussion; see [`apps/README.md`](../README.md#what-is-shared-and-how)).
-- **ProGuard/R8 shrinking.** There is nothing to shrink, and an unverified
-  ProGuard config is how you ship a release build that crashes where debug does not.
 
 ## Reader size and pinch
 
@@ -276,6 +274,11 @@ measures and draws.
   **Verified on a phone 2026-10-15**: the top line stays put through repeated
   rotations in any order, whether it was tapped or scrolled to. iOS passes the
   same test since 2026-10-15 ([ios/README.md](../ios/README.md#state-of-play)).
+- **Release builds run R8** (2026-10-19), for its optimisation of Compose's code.
+  Anything reached only by reflection needs a keep rule in `app/proguard-rules.pro`,
+  or release crashes where debug does not: today JNA and `uniffi.gurmukhi`, which
+  the gurmukhi bindings call through. After adding a dependency that uses
+  reflection or JNI, run a release build on a phone through every screen.
 - **Judge animation smoothness on a release build, never a debug one.** The tap
   scroll felt juddery in debug builds and smooth in release (Pixel 7a, 2026-10-19,
   R8 still off); changing its easing did not help. To check on a phone, sign the

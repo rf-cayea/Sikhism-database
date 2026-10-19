@@ -89,9 +89,12 @@ android {
 
   buildTypes {
     release {
-      // No shrinking: there is nothing to shrink yet, and an unverified ProGuard
-      // config is a way to ship a release build that crashes where debug does not.
-      isMinifyEnabled = false
+      // R8 on (2026-10-19), for its optimisation of Compose's code more than for
+      // shrinking. Checked on a Pixel 7a: launch, readers, both pronunciations
+      // (the JNA bindings), tap scroll, Journeys, rotation. Keep rules for what is reached only by reflection are in
+      // proguard-rules.pro; a missing one crashes release where debug does not.
+      isMinifyEnabled = true
+      proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       signingConfig = signingConfigs.findByName("upload")
     }
   }
