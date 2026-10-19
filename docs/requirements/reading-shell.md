@@ -146,6 +146,22 @@ The reading area is specified entirely by
 [display-controls.md](display-controls.md) — mode, alignment, sizing, which fields
 are shown.
 
+### The screen stays awake while content is read
+
+**While the viewer shows content — a bani, shabad, ang, anything being read — and
+no sidebar is open, the app keeps the screen from sleeping** (decided 2026-10-19).
+Someone reading along during kirtan or paath is not touching the phone, and a
+screen that dims and locks mid-pauri interrupts them.
+
+- **It lasts until the journey goes idle** ([journeys.md](journeys.md#journeys)):
+  15 minutes without activity end the journey, the viewer returns to the default
+  screen, and the hold goes with it. A phone left reading does not stay lit all
+  night.
+- **Everywhere else the device's own auto-lock applies**: the default screen, and
+  the viewer while either sidebar is open.
+- This is separate from hosting a Connect session, which holds the screen for its
+  own reasons ([connect.md](connect.md)).
+
 ## The default screen
 
 **What the viewer shows when there is nothing to resume**: a blank screen reading
@@ -402,6 +418,9 @@ list, not a new one, is what should be presented.
 
 ## What a test must pin down
 
+- **Screen awake.** A bani open with no sidebar ⇒ held awake; Journeys opened ⇒
+  released; the default screen ⇒ released; 15 minutes without activity ⇒ the
+  journey ends and the hold is released.
 - **Mutual exclusion.** Open Journeys, then trigger Controls ⇒ Journeys is closed.
 - **Toggle symmetry.** For each sidebar: header button opens it, swipe opens it, the
   same button closes it, and all three land in the same state.

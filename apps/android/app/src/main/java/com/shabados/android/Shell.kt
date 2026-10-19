@@ -101,6 +101,11 @@ class ShellState(
    * is left to the system. */
   val handlesBack: Boolean get() = journeysOpen
 
+  /** Whether the screen is held awake: content open in the viewer, no sidebar
+   * (reading-shell.md#the-screen-stays-awake-while-content-is-read). The 15-minute
+   * limit needs nothing here: going idle ends the journey, which closes the content. */
+  val keepsScreenOn: Boolean get() = openId != null && !journeysOpen
+
   fun back() {
     setJourneys(open = false)
   }

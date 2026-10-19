@@ -80,6 +80,7 @@ import androidx.compose.ui.input.pointer.util.addPointerInputChange
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -284,6 +285,14 @@ fun ReaderShell(shell: ShellState, readerKey: Any, banis: List<Bani>) {
   }
 
   BackHandler(enabled = shell.handlesBack) { setJourneys(open = false) }
+
+  // Held awake while content is read (`ShellState.keepsScreenOn`). The flag is the
+  // window's, so it applies only while the app is in front; released on leaving.
+  val keepsScreenOn = shell.keepsScreenOn
+  DisposableEffect(keepsScreenOn) {
+    view.keepScreenOn = keepsScreenOn
+    onDispose { view.keepScreenOn = false }
+  }
 
   LaunchedEffect(Unit) {
     while (true) {

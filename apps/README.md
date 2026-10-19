@@ -203,6 +203,7 @@ iOS or SwiftUI problem Android does not have; **to decide** is not settled.
 | Default-screen pills: Jap Ji Sahib, Rehras Sahib, Kirtan Sohila (Ardas once bundled); greeting `greetingRatio` and pills `pillRatio` × Body | [library.md](../docs/requirements/library.md#base-collections), [tokens.md](../packages/design/tokens.md#type) | **Done.** The ratios are generated tokens on both since 2026-10-16. |
 | Interface Gurmukhi at `uiGurmukhiRatio` × Body, `weightPrimary`; Latin at Body | [tokens.md](../packages/design/tokens.md#type) | **Done.** Android's Body is `androidBodySize` sp. |
 | Bani list in Gurmukhi only | — | **Done.** |
+| Screen held awake while content is read with no sidebar open; released when the journey goes idle | [reading-shell.md](../docs/requirements/reading-shell.md#the-screen-stays-awake-while-content-is-read) | **Done on both** (2026-10-19): `keepsScreenOn` in `ShellState` and `ReaderShell`. |
 | Rehras listed without (ਸ:) | — | **Done on both:** it comes from the bundled export. |
 | Lucide icons follow Text Size (`ScaledLucide`) | [icons.md](../packages/design/icons.md#lucide-assets) | **To decide.** Android icons are sized in dp and do not follow font scale, which is the platform norm. |
 | A tap scrolls to an offset, not a row id | — | **iOS only.** It works around SwiftUI keeping an animated scroll's target. Android scrolls by offset for a different reason: a duration. |

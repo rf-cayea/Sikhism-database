@@ -264,6 +264,11 @@ struct ReaderShell: View {
       // as fixed padding instead, above.
       .ignoresSafeArea(.container)
     }
+    // Held awake while content is read (`keepsScreenOn`). iOS applies the flag only
+    // while the app is in front.
+    .onChange(of: keepsScreenOn, initial: true) { _, on in
+      UIApplication.shared.isIdleTimerDisabled = on
+    }
     // On opening only (chosen 2026-10-16).
     .sensoryFeedback(.impact(weight: .light), trigger: journeysOpen) { _, isOpen in isOpen }
     .onReceive(idleCheck) { _ in refresh() }
@@ -294,6 +299,12 @@ struct ReaderShell: View {
   private func cardShape(moved: Bool) -> ConcentricRectangle {
     ConcentricRectangle(corners: moved ? .concentric(minimum: .fixed(Self.movingCornerRadius)) : .concentric)
   }
+
+  /// Whether the screen is held awake: content open in the viewer, no sidebar
+  /// (docs/requirements/reading-shell.md#the-screen-stays-awake-while-content-is-read).
+  /// The 15-minute limit needs nothing here: going idle ends the journey, which
+  /// closes the content. Android's `ShellState.keepsScreenOn` is the same rule.
+  private var keepsScreenOn: Bool { baniID != nil && !journeysOpen }
 
   @ViewBuilder
   private var viewer: some View {

@@ -145,6 +145,28 @@ class ShellTest {
     assertEquals(wall - 15 * minute, store.value?.atMs)
   }
 
+  // ---------------------------------------------------------------- screen awake
+  // reading-shell.md#the-screen-stays-awake-while-content-is-read
+
+  @Test fun `the screen is held awake while a bani is open with no sidebar`() {
+    val shell = shell()
+    assertFalse("default screen", shell.keepsScreenOn)
+    shell.open("JAPJ")
+    assertTrue(shell.keepsScreenOn)
+    shell.setJourneys(open = true)
+    assertFalse("Journeys open", shell.keepsScreenOn)
+    shell.setJourneys(open = false)
+    assertTrue(shell.keepsScreenOn)
+  }
+
+  @Test fun `going idle releases the screen`() {
+    val shell = shell()
+    shell.open("JAPJ")
+    clock += 15 * minute
+    shell.refresh()
+    assertFalse(shell.keepsScreenOn)
+  }
+
   @Test fun `the idle limit is 15 minutes`() {
     assertEquals(15 * minute, ShellState.IDLE_LIMIT_MS)
   }
