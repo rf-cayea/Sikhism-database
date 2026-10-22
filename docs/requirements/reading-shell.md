@@ -112,6 +112,11 @@ follows: it does ([the Controls sidebar](#the-controls-sidebar), 2026-10-19).
 Journeys button all return to the viewer in one action. There is no state where a person has
 tapped something and is still looking at the sidebar wondering whether it worked.
 
+**A swipe that moves the viewer is only a swipe** (2026-10-22): it never also
+activates the pill, row or button it started on. **And only the sidebar being shown
+takes touches**: the other, hidden beneath it, is out of reach, so a tap on a
+Journeys row can never reach a Controls slider.
+
 **Where a gesture exists it competes with text selection and with pinch-to-zoom**
 ([display-controls.md](display-controls.md#zoom)), and the conflict must be resolved
 deliberately rather than by whichever recogniser happens to win. The
@@ -174,6 +179,10 @@ It carries a **continue reading** affordance whose byline names the anchor of th
 most recent journey ([journeys.md](journeys.md#recents-and-inactive-sessions)) — "what it was on last
 open". If there is no previous journey, the greeting stands alone with no
 affordance; an empty or dead control on a first launch is worse than nothing.
+
+**Both its lines stay on one line** (2026-10-22): where `Continue reading` does not
+fit it reads `Continue`, never wrapped and never `Continue…`, and the bani's name is
+cut short with an ellipsis.
 
 #### How long `continue reading` is offered
 
@@ -503,6 +512,11 @@ The interface follows the platform's text size, **within limits that keep
 Appearance's preview in view** (2026-10-19). Interface text is Journeys, Controls
 and Settings. **Never the reader or the preview**, which Zoom sizes, and never the
 bars, which stay at the default size on iOS ([header](#header)).
+
+**The sidebars' header titles are marks, not text** (2026-10-22): `Shabad OS` with
+its icon, and `Controls`, stay on one line at every size. On iOS they do not follow
+Text Size, as no bar does. On Android they grow with Font size up to 28dp and stop,
+the icon keeping its proportion to the name, so the pair reads as a logo.
 
 The goal on Appearance's page: **the sliders' group starts no higher than halfway
 down the screen**, at every text size and display size, so the preview keeps the

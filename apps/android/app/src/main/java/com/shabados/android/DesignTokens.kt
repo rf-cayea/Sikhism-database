@@ -56,8 +56,7 @@ object DesignTokens {
   const val DEFAULT_SIZE = 28f
   const val LIST_SIZE = 20f
   const val UI_GURMUKHI_RATIO = 1.15f
-  const val GREETING_RATIO = 3.2f
-  const val PILL_RATIO = 1.6f
+  const val GREETING_RATIO = 1.6f
   const val MIN_SIZE = 16f
   const val PHONE_MAX_SIZE = 88f
   const val PAD_MAX_SIZE = 132f

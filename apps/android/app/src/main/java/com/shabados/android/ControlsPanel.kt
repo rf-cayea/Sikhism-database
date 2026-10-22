@@ -107,8 +107,12 @@ fun ControlsPanel(controls: ReaderControls, onSettings: () -> Unit, modifier: Mo
       Text(
         text = "Controls",
         style = MaterialTheme.typography.titleLarge,
+        // Capped as the Journeys header's is (`headerTitleSize`).
+        fontSize = headerTitleSize(),
         fontWeight = FontWeight.SemiBold,
         color = colors.onSurface,
+        maxLines = 1,
+        softWrap = false,
       )
       Spacer(Modifier.weight(1f))
       AppearanceButton(controls)

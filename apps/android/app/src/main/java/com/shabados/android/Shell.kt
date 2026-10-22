@@ -258,6 +258,12 @@ object Sidebar {
     null -> 0f
   }
 
+  /** Whether Controls is laid out at [progress] (signed, as [base]): **not while the
+   * viewer is moved towards Journeys.** Controls sits above Journeys, and faded out
+   * it still took touches: taps on Journeys' rows moved its hidden sliders, changing
+   * the zoom, ratio and weight (2026-10-22). Journeys, beneath, needs no such rule. */
+  fun controlsLaidOut(progress: Float): Boolean = progress <= 0f
+
   /** How visible a sidebar is with the viewer moved [amount] of the way towards
    * showing it, whichever side; [scale] likewise. */
   fun strength(amount: Float): Float =

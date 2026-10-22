@@ -117,6 +117,18 @@ struct ReaderShell: View {
   @State private var dragX: CGFloat?
   /// What the current drag was judged to be, once it has moved far enough to tell.
   @State private var dragAxis: DragAxis?
+  /// When a drag that moved the viewer last ended. **A button lifted with it does
+  /// nothing** (`swiping`): a `Button` fires on lifting however far the finger
+  /// travelled, so a swipe that began on a default-screen pill opened that bani as
+  /// well as the sidebar (iPhone, 2026-10-22).
+  ///
+  /// A time, not a flag cleared when the next touch begins: on a plain tap the
+  /// button's action runs before this shell's drag hears of the touch, so the first
+  /// tap after any swipe, the one that opened Journeys included, was swallowed.
+  @State private var swipeEnded: Date?
+  /// How long after a swipe ends its own lift may still reach a button. A deliberate
+  /// tap comes later than this.
+  private static let swipeSettle: TimeInterval = 0.3
   /// `@State` only to keep one instance for the view's lifetime.
   @State private var activity = ActivityClock()
   /// `@State` only to keep one instance for the view's lifetime.
@@ -494,6 +506,7 @@ struct ReaderShell: View {
       .onEnded { value in
         defer { dragAxis = nil }
         guard dragAxis == .horizontal else { return }
+        swipeEnded = .now
         // Where a flick would carry it, not only where the finger lifted, so a
         // short quick drag still opens or closes.
         let base = Self.base(openSide)
@@ -554,7 +567,16 @@ struct ReaderShell: View {
 
   /// Every path out of the sidebar closes it
   /// (docs/requirements/reading-shell.md#getting-between-them).
+  /// Whether a touch lifting now is the end of a swipe rather than a tap: the
+  /// viewer is being dragged, or a drag that moved it has only just ended.
+  private var swiping: Bool {
+    if dragX != nil { return true }
+    guard let swipeEnded else { return false }
+    return Date.now.timeIntervalSince(swipeEnded) < Self.swipeSettle
+  }
+
   private func open(_ bani: Bani) {
+    guard !swiping else { return }
     activity.touch()
     baniID = bani.id
     startLine = nil
@@ -565,7 +587,7 @@ struct ReaderShell: View {
 
   /// `continue reading`: opens `previous` at the line that was at its top.
   private func resume() {
-    guard let previous else { return }
+    guard let previous, !swiping else { return }
     activity.touch()
     baniID = previous.id
     startLine = previous.line
@@ -724,8 +746,9 @@ private struct DefaultScreen: View {
 
   /// The system's Body text size: 17pt at the default Text Size, following the
   /// person's setting. The greeting and pills are sized from it, not from the
-  /// reader's size, so pinching the reader does not change them
-  /// (`greetingRatio`, `pillRatio`: packages/design/tokens.md#type).
+  /// reader's size, so pinching the reader does not change them: the pills at the
+  /// interface Gurmukhi size, the greeting at `greetingRatio` × that
+  /// (packages/design/tokens.md#type).
   @ScaledMetric(relativeTo: .body) private var uiSize: CGFloat = 17
   /// Added to each side of a pill's text, beyond the glass button's own inset.
   /// First pass (2026-10-16).
@@ -764,7 +787,7 @@ private struct DefaultScreen: View {
       Text("ਸਤਿ ਸ੍ਰੀ ਅਕਾਲ")
         .font(Fonts.variable(
           Fonts.gurmukhi,
-          size: uiSize * DesignTokens.greetingRatio,
+          size: uiSize * DesignTokens.uiGurmukhiRatio * DesignTokens.greetingRatio,
           weight: DesignTokens.weightPrimary
         ))
         .foregroundStyle(DesignTokens.foreground)
@@ -781,12 +804,20 @@ private struct DefaultScreen: View {
       // control on a first launch is worse than nothing".
       if let bani = continueWith {
         Button(action: onContinue) {
+          // Each on one line (reading-shell.md#the-default-screen): the label
+          // shortens to `Continue` rather than wrapping, and the bani's name is cut
+          // short.
           VStack(spacing: 2) {
-            Text("Continue reading")
-              .font(.headline)
+            ViewThatFits(in: .horizontal) {
+              Text("Continue reading")
+              Text("Continue")
+            }
+            .font(.headline)
+            .lineLimit(1)
             Text(bani.latin)
               .font(.subheadline)
               .foregroundStyle(DesignTokens.foregroundMuted)
+              .lineLimit(1)
           }
         }
         .buttonStyle(.glass)
@@ -802,7 +833,7 @@ private struct DefaultScreen: View {
       // Gurmukhi in the greeting's weight and colour (chosen 2026-10-16).
       Button { open(bani) } label: {
         Text(bani.gurmukhi)
-          .font(Fonts.variable(Fonts.gurmukhi, size: uiSize * DesignTokens.pillRatio, weight: DesignTokens.weightPrimary))
+          .font(Fonts.variable(Fonts.gurmukhi, size: uiSize * DesignTokens.uiGurmukhiRatio, weight: DesignTokens.weightPrimary))
           .foregroundStyle(DesignTokens.foreground)
           .padding(.horizontal, Self.pillPadding)
       }
@@ -843,10 +874,10 @@ private struct JourneysPanel: View {
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: 0) {
-        // Latin interface text at the system's Body size (`headline` is Body,
-        // semibold); see packages/design/tokens.md#type.
+        // A section label, as a grouped list's header is: Subheadline, muted
+        // (2026-10-22). Not a `List` section, so set to match by hand.
         Text("Nitnem")
-          .font(.headline)
+          .font(.subheadline)
           .foregroundStyle(DesignTokens.foregroundMuted)
           .padding(.horizontal, Self.inset)
           .padding(.bottom, 8)

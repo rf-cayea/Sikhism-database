@@ -265,6 +265,15 @@ class ShellTest {
     assertFalse(shell().handlesBack)
   }
 
+  @Test fun `Controls is not laid out over Journeys`() {
+    // Faded out over Journeys it still took touches: taps on Journeys' rows moved
+    // its hidden sliders (2026-10-22).
+    assertFalse(Sidebar.controlsLaidOut(0.01f))
+    assertFalse(Sidebar.controlsLaidOut(1f))
+    assertTrue(Sidebar.controlsLaidOut(0f))
+    assertTrue(Sidebar.controlsLaidOut(-1f))
+  }
+
   @Test fun `the sidebar fades from 40 percent to full by half the slide`() {
     assertEquals(0.4f, Sidebar.strength(0f), 1e-6f)
     assertEquals(0.7f, Sidebar.strength(0.25f), 1e-6f)

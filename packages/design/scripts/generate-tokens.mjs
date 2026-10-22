@@ -44,7 +44,7 @@ const opacity = scalars('Opacity')
 const weight = scalars('Weight')
 const type = scalars('Type')
 
-for (const key of ['defaultSize', 'listSize', 'uiGurmukhiRatio', 'greetingRatio', 'pillRatio', 'lineHeightRatio', 'minSize', 'phoneMaxSize', 'padMaxSize', 'startingSizeFactor', 'padStartingSize', 'androidBodySize', 'ratioMin', 'ratioMax']) {
+for (const key of ['defaultSize', 'listSize', 'uiGurmukhiRatio', 'greetingRatio', 'lineHeightRatio', 'minSize', 'phoneMaxSize', 'padMaxSize', 'startingSizeFactor', 'padStartingSize', 'androidBodySize', 'ratioMin', 'ratioMax']) {
   if (type[key] === undefined) throw new Error(`packages/design/tokens.md: type.${key} missing`)
 }
 for (const key of ['weightMin', 'weightMax', 'weightDefault']) {
@@ -153,7 +153,6 @@ ${Object.entries(color).map(([k, v]) => swiftColor(k, v)).join('\n\n')}
   static let listSize: Double = ${type.listSize}
   static let uiGurmukhiRatio: Double = ${type.uiGurmukhiRatio}
   static let greetingRatio: Double = ${type.greetingRatio}
-  static let pillRatio: Double = ${type.pillRatio}
   static let minSize: Double = ${type.minSize}
   static let phoneMaxSize: Double = ${type.phoneMaxSize}
   static let padMaxSize: Double = ${type.padMaxSize}
@@ -230,7 +229,6 @@ ${Object.entries(color).map(([k, v]) => kotlinColor(k, v)).join('\n\n')}
   const val LIST_SIZE = ${type.listSize}f
   const val UI_GURMUKHI_RATIO = ${type.uiGurmukhiRatio}f
   const val GREETING_RATIO = ${type.greetingRatio}f
-  const val PILL_RATIO = ${type.pillRatio}f
   const val MIN_SIZE = ${type.minSize}f
   const val PHONE_MAX_SIZE = ${type.phoneMaxSize}f
   const val PAD_MAX_SIZE = ${type.padMaxSize}f

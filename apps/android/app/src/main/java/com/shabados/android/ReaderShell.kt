@@ -52,6 +52,7 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -109,6 +110,18 @@ import kotlin.math.roundToInt
 /** The viewer's header height: a Material top app bar's, so the sidebar's name sits
  * level with the viewer's Journeys button beside it. */
 internal val HeaderHeight = 64.dp
+
+/** A sidebar header title's size: Material's `titleLarge`, 22sp, growing with Font
+ * size up to [HeaderTitleMax] and no further, so a header reads as a fixed mark
+ * rather than text that reflows. Uncapped, `Shabad OS` broke onto two lines at large
+ * Font sizes (2026-10-22). iOS pins these titles at the default size instead
+ * (`BarMetrics.typeSize`); Android lets them grow this far. */
+internal val HeaderTitleSize = 22.sp
+internal val HeaderTitleMax = 28.dp
+
+@Composable
+internal fun headerTitleSize(): TextUnit =
+  with(LocalDensity.current) { minOf(HeaderTitleSize.toDp(), HeaderTitleMax).toSp() }
 
 /** The space on each side of the sidebar's content: one left edge for the logo, the
  * section label and every row's text (chosen on iOS 2026-10-16). */
@@ -279,6 +292,9 @@ fun ReaderShell(shell: ShellState, readerKey: Any, banis: List<Bani>, controls: 
   /** Settings, as a sheet over everything (reading-shell.md#settings). */
   var settingsShown by rememberSaveable { mutableStateOf(false) }
   fun progress() = dragProgress ?: slide.value
+  /** Read in composition, so derived: recomposes when the answer changes, not on
+   * every frame of a slide. */
+  val controlsLaidOut by remember { derivedStateOf { Sidebar.controlsLaidOut(progress()) } }
 
   fun setSide(side: Side?) {
     // On opening only (docs/interaction.md, chosen 2026-10-16). CONTEXT_CLICK is
@@ -403,7 +419,8 @@ fun ReaderShell(shell: ShellState, readerKey: Any, banis: List<Bani>, controls: 
           },
       )
       // The same on the other side: Controls, growing outward from its left edge.
-      ControlsPanel(
+      // Left out while Journeys shows, which it would cover (`Sidebar.controlsLaidOut`).
+      if (controlsLaidOut) ControlsPanel(
         controls = controls,
         onSettings = { settingsShown = true },
         modifier = Modifier
@@ -690,8 +707,8 @@ private fun JourneysPanel(
     ) {
       Text(
         text = stringResource(R.string.nitnem),
-        fontSize = BodySize,
-        fontWeight = FontWeight.SemiBold,
+        // A section label, as Settings' `Pronunciations` is (2026-10-22).
+        fontSize = bodyTimes(0.88f),
         color = colors.onSurfaceVariant,
         modifier = Modifier.padding(start = SidebarInset, end = SidebarInset, bottom = 8.dp),
       )
@@ -725,16 +742,24 @@ private fun JourneysPanel(
     ) {
       // The app icon, round (res/drawable-nodpi/ic_launcher_logo.png, the lotus
       // over its gradient, from brand/assets/lotus.svg via the legacy export).
+      // A logo: the icon keeps its 32dp-to-22sp proportion to the name as the name
+      // grows, and the name stays on one line.
+      val titleSize = headerTitleSize()
       Image(
         painter = painterResource(R.drawable.ic_launcher_logo),
         contentDescription = null,
-        modifier = Modifier.size(32.dp).clip(CircleShape),
+        modifier = Modifier
+          .size(with(LocalDensity.current) { titleSize.toDp() } * (32f / 22f))
+          .clip(CircleShape),
       )
       Text(
         text = stringResource(R.string.app_name),
         style = MaterialTheme.typography.titleLarge,
+        fontSize = titleSize,
         fontWeight = FontWeight.SemiBold,
         color = colors.onSurface,
+        maxLines = 1,
+        softWrap = false,
       )
     }
   }
@@ -746,9 +771,10 @@ private fun JourneysPanel(
  * is one (docs/requirements/reading-shell.md#the-default-screen). No title: the
  * title names what is being read, and nothing is.
  *
- * The greeting and pills are sized from the system's Body size
- * (`GREETING_RATIO`, `PILL_RATIO`: packages/design/tokens.md#type), not from the
- * reader's size, so pinching the reader does not change them.
+ * The greeting and pills are sized from the system's Body size, not from the
+ * reader's size, so pinching the reader does not change them: the pills at the
+ * interface Gurmukhi size, the greeting at `GREETING_RATIO` × that
+ * (packages/design/tokens.md#type).
  */
 @Composable
 private fun DefaultScreen(
@@ -777,8 +803,8 @@ private fun DefaultScreen(
       Text(
         text = "ਸਤਿ ਸ੍ਰੀ ਅਕਾਲ",
         fontFamily = gurmukhi,
-        fontSize = bodyTimes(DesignTokens.GREETING_RATIO),
-        lineHeight = bodyTimes(DesignTokens.GREETING_RATIO * DesignTokens.LINE_HEIGHT_RATIO),
+        fontSize = bodyTimes(DesignTokens.UI_GURMUKHI_RATIO * DesignTokens.GREETING_RATIO),
+        lineHeight = bodyTimes(DesignTokens.UI_GURMUKHI_RATIO * DesignTokens.GREETING_RATIO * DesignTokens.LINE_HEIGHT_RATIO),
         color = colors.onBackground,
         textAlign = TextAlign.Center,
       )
@@ -788,7 +814,7 @@ private fun DefaultScreen(
           Text(
             text = bani.gurmukhi,
             fontFamily = gurmukhi,
-            fontSize = bodyTimes(DesignTokens.PILL_RATIO),
+            fontSize = bodyTimes(DesignTokens.UI_GURMUKHI_RATIO),
             color = colors.onBackground,
             maxLines = 1,
             modifier = Modifier
@@ -810,14 +836,40 @@ private fun DefaultScreen(
             .clickable { onContinue() }
             .padding(horizontal = 24.dp, vertical = 10.dp),
         ) {
-          Text("Continue reading", fontSize = BodySize, fontWeight = FontWeight.SemiBold, color = colors.primary)
-          Text(continueWith.latin, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
+          // Each on one line (reading-shell.md#the-default-screen): the label
+          // shortens to `Continue` rather than wrapping, and the bani's name is cut
+          // short.
+          FirstThatFits {
+            Text("Continue reading", fontSize = BodySize, fontWeight = FontWeight.SemiBold, color = colors.primary, maxLines = 1)
+            Text("Continue", fontSize = BodySize, fontWeight = FontWeight.SemiBold, color = colors.primary, maxLines = 1)
+          }
+          Text(
+            continueWith.latin,
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+          )
         }
       }
     }
     // No title, since nothing is being read; Controls is here too, so the preview
     // and appearance are reachable before anything is open.
     ViewerHeader(title = null, onJourneys = onJourneys) { ControlsButton(onClick = onControls, onLongClick = onSettings) }
+  }
+}
+
+/**
+ * The first of its children whose one-line width fits, or the last if none does
+ * (iOS's `ViewThatFits`). Only the one chosen is measured and drawn.
+ */
+@Composable
+private fun FirstThatFits(content: @Composable () -> Unit) {
+  Layout(content) { measurables, constraints ->
+    val chosen = measurables.firstOrNull { it.maxIntrinsicWidth(constraints.maxHeight) <= constraints.maxWidth }
+      ?: measurables.last()
+    val placeable = chosen.measure(constraints.copy(minWidth = 0, minHeight = 0))
+    layout(placeable.width, placeable.height) { placeable.placeRelative(0, 0) }
   }
 }
 

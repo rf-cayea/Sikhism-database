@@ -153,11 +153,17 @@ lower in the line box and its strokes are thinner — so it is set larger and he
 to read as the same size. The Journeys sidebar uses this in place of `listSize`;
 the reader's own size is separate and set by pinch.
 
+**Section labels** — Journeys' `Nitnem`, Settings' `Pronunciations` — are muted and
+one step down: a grouped list's own section header on iOS (Subheadline), and 0.88 ×
+Body on Android (2026-10-22).
+
 **The default screen is sized from the Body size too**
 ([reading-shell.md](../docs/requirements/reading-shell.md#the-default-screen)):
-the greeting ਸਤਿ ਸ੍ਰੀ ਅਕਾਲ at `greetingRatio` × Body and its pills at `pillRatio`
-× Body, both Gurmukhi at `weightPrimary` in the text colour (chosen 2026-10-16).
-Neither follows the reader's pinch size: the screen shows nothing being read.
+the pills at the interface Gurmukhi size, `uiGurmukhiRatio` × Body, as Journeys'
+rows are, and the greeting at `greetingRatio` × that size (2026-10-22; first set at
+3.2 and 1.6 × Body, which put them at three and one and a half times anything else in
+the interface). Both are Gurmukhi at `weightPrimary` in the text colour. Neither
+follows the reader's pinch size: the screen shows nothing being read.
 
 **The zoom range is per device** (2026-10-10). `minSize` applies everywhere.
 `phoneMaxSize` is the iPhone's maximum and `padMaxSize` the iPad's: an iPad's wider
@@ -175,8 +181,7 @@ tablet; folded, a phone.
 | defaultSize | `28` |
 | listSize | `20` |
 | uiGurmukhiRatio | `1.15` |
-| greetingRatio | `3.2` |
-| pillRatio | `1.6` |
+| greetingRatio | `1.6` |
 | lineHeightRatio | `1.6` |
 | minSize | `16` |
 | phoneMaxSize | `88` |
