@@ -1,5 +1,6 @@
 package com.shabados.android
 
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -80,6 +81,11 @@ private val Dark: ColorScheme = darkColorScheme(
 fun ShabadOSTheme(dark: Boolean, content: @Composable () -> Unit) {
   val scheme = if (dark) Dark else Light
   MaterialTheme(colorScheme = scheme) {
-    CompositionLocalProvider(LocalContentColor provides scheme.onBackground, content = content)
+    CompositionLocalProvider(LocalContentColor provides scheme.onBackground, LocalDark provides dark, content = content)
   }
 }
+
+/** Whether the app is drawing dark: the Appearance setting, or the system's under
+ * Auto (docs/requirements/display-controls.md#appearance). Read this, never
+ * `isSystemInDarkTheme`, which ignores the setting. */
+val LocalDark = staticCompositionLocalOf { false }

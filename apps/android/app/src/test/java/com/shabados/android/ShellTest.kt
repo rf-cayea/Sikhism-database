@@ -69,7 +69,7 @@ class ShellTest {
     val shell = shell()
     shell.open("JAPJ")
     clock += 10 * minute
-    shell.setJourneys(open = true)
+    shell.setSide(Side.JOURNEYS)
     clock += 10 * minute
     shell.refresh()
     assertEquals("JAPJ", shell.openId)
@@ -187,9 +187,9 @@ class ShellTest {
     assertFalse("default screen", shell.keepsScreenOn)
     shell.open("JAPJ")
     assertTrue(shell.keepsScreenOn)
-    shell.setJourneys(open = true)
+    shell.setSide(Side.JOURNEYS)
     assertFalse("Journeys open", shell.keepsScreenOn)
-    shell.setJourneys(open = false)
+    shell.setSide(null)
     assertTrue(shell.keepsScreenOn)
   }
 
@@ -210,7 +210,7 @@ class ShellTest {
   @Test fun `opening a bani closes the sidebar`() {
     // reading-shell.md: every path out of the sidebar closes it.
     val shell = shell()
-    shell.setJourneys(open = true)
+    shell.setSide(Side.JOURNEYS)
     shell.open("RHRS")
     assertFalse(shell.journeysOpen)
     assertEquals("RHRS", shell.openId)
@@ -219,14 +219,43 @@ class ShellTest {
   @Test fun `the haptic plays on opening only`() {
     // docs/interaction.md: a light haptic on opening, none on closing.
     val shell = shell()
-    assertTrue(shell.setJourneys(open = true))
-    assertFalse("already open", shell.setJourneys(open = true))
-    assertFalse("closing", shell.setJourneys(open = false))
+    assertTrue(shell.setSide(Side.JOURNEYS))
+    assertFalse("already open", shell.setSide(Side.JOURNEYS))
+    assertFalse("closing", shell.setSide(null))
+    assertTrue("Controls", shell.setSide(Side.CONTROLS))
+    assertTrue("switching to Journeys opens it", shell.setSide(Side.JOURNEYS))
+  }
+
+  @Test fun `at most one sidebar is open`() {
+    // reading-shell.md#the-controls-sidebar: opening one sidebar closes the other.
+    val shell = shell()
+    shell.setSide(Side.JOURNEYS)
+    shell.toggle(Side.CONTROLS)
+    assertEquals(Side.CONTROLS, shell.openSide)
+    assertFalse(shell.journeysOpen)
+  }
+
+  @Test fun `a header button opens its sidebar and closes it again`() {
+    val shell = shell()
+    shell.toggle(Side.CONTROLS)
+    assertEquals(Side.CONTROLS, shell.openSide)
+    shell.toggle(Side.CONTROLS)
+    assertNull(shell.openSide)
+  }
+
+  @Test fun `Controls open releases the screen and Back closes it`() {
+    val shell = shell()
+    shell.open("JAPJ")
+    shell.setSide(Side.CONTROLS)
+    assertFalse(shell.keepsScreenOn)
+    assertTrue(shell.handlesBack)
+    shell.back()
+    assertNull(shell.openSide)
   }
 
   @Test fun `Back closes the sidebar`() {
     val shell = shell()
-    shell.setJourneys(open = true)
+    shell.setSide(Side.JOURNEYS)
     assertTrue(shell.handlesBack)
     shell.back()
     assertFalse(shell.journeysOpen)
@@ -254,20 +283,20 @@ class ShellTest {
   }
 
   @Test fun `in portrait the sidebar is the screen's width less the edge`() {
-    assertEquals(339f, Sidebar.travel(width = 411f, height = 914f, peek = 72f, leftInset = 0f))
+    assertEquals(339f, Sidebar.travel(width = 411f, height = 914f, peek = 72f, edgeInset = 0f))
   }
 
   @Test fun `in landscape the sidebar is as wide as in portrait`() {
     assertEquals(
-      Sidebar.travel(width = 411f, height = 914f, peek = 72f, leftInset = 0f),
-      Sidebar.travel(width = 914f, height = 411f, peek = 72f, leftInset = 0f),
+      Sidebar.travel(width = 411f, height = 914f, peek = 72f, edgeInset = 0f),
+      Sidebar.travel(width = 914f, height = 411f, peek = 72f, edgeInset = 0f),
     )
   }
 
   @Test fun `a cutout on the left widens the sidebar by its inset, so its contents keep their width`() {
     // The panel is padded clear of the cutout inside the travel.
-    val portrait = Sidebar.travel(width = 411f, height = 914f, peek = 72f, leftInset = 0f)
-    val landscape = Sidebar.travel(width = 914f, height = 411f, peek = 72f, leftInset = 48f)
+    val portrait = Sidebar.travel(width = 411f, height = 914f, peek = 72f, edgeInset = 0f)
+    val landscape = Sidebar.travel(width = 914f, height = 411f, peek = 72f, edgeInset = 48f)
     assertEquals(portrait, landscape - 48f)
   }
 
@@ -276,26 +305,31 @@ class ShellTest {
   private val slop = 10f
 
   @Test fun `a drag is undecided until it has moved the decision distance`() {
-    assertNull(Sidebar.judge(dx = 9f, dy = 2f, decision = slop, open = false))
+    assertNull(Sidebar.judge(dx = 9f, dy = 2f, decision = slop, open = null))
   }
 
   @Test fun `a mostly horizontal rightward drag opens`() {
-    assertEquals(Sidebar.Axis.HORIZONTAL, Sidebar.judge(dx = 30f, dy = 10f, decision = slop, open = false))
+    assertEquals(Sidebar.Axis.HORIZONTAL, Sidebar.judge(dx = 30f, dy = 10f, decision = slop, open = null))
   }
 
   @Test fun `a steeper drag is a scroll`() {
     // 1.5 × 20 = 30: not more horizontal than that.
-    assertEquals(Sidebar.Axis.OTHER, Sidebar.judge(dx = 30f, dy = 20f, decision = slop, open = false))
-    assertEquals(Sidebar.Axis.OTHER, Sidebar.judge(dx = 2f, dy = 40f, decision = slop, open = false))
+    assertEquals(Sidebar.Axis.OTHER, Sidebar.judge(dx = 30f, dy = 20f, decision = slop, open = null))
+    assertEquals(Sidebar.Axis.OTHER, Sidebar.judge(dx = 2f, dy = 40f, decision = slop, open = null))
   }
 
-  @Test fun `a leftward drag does not open`() {
-    assertEquals(Sidebar.Axis.OTHER, Sidebar.judge(dx = -30f, dy = 0f, decision = slop, open = false))
+  @Test fun `a leftward drag opens Controls`() {
+    assertEquals(Sidebar.Axis.HORIZONTAL, Sidebar.judge(dx = -30f, dy = 0f, decision = slop, open = null))
+  }
+
+  @Test fun `with Controls open a rightward drag closes and a leftward one does not`() {
+    assertEquals(Sidebar.Axis.HORIZONTAL, Sidebar.judge(dx = 30f, dy = 0f, decision = slop, open = Side.CONTROLS))
+    assertEquals(Sidebar.Axis.OTHER, Sidebar.judge(dx = -30f, dy = 0f, decision = slop, open = Side.CONTROLS))
   }
 
   @Test fun `a leftward drag closes and a rightward one does not`() {
-    assertEquals(Sidebar.Axis.HORIZONTAL, Sidebar.judge(dx = -30f, dy = 0f, decision = slop, open = true))
-    assertEquals(Sidebar.Axis.OTHER, Sidebar.judge(dx = 30f, dy = 0f, decision = slop, open = true))
+    assertEquals(Sidebar.Axis.HORIZONTAL, Sidebar.judge(dx = -30f, dy = 0f, decision = slop, open = Side.JOURNEYS))
+    assertEquals(Sidebar.Axis.OTHER, Sidebar.judge(dx = 30f, dy = 0f, decision = slop, open = Side.JOURNEYS))
   }
 
   @Test fun `a drag from the gesture navigation edges does not count`() {
@@ -311,18 +345,53 @@ class ShellTest {
   }
 
   @Test fun `a drag moves the viewer by its share of the travel, within the ends`() {
-    assertEquals(0.25f, Sidebar.progress(open = false, dx = 200f, travel = 800f), 1e-6f)
-    assertEquals(0.75f, Sidebar.progress(open = true, dx = -200f, travel = 800f), 1e-6f)
-    assertEquals(1f, Sidebar.progress(open = false, dx = 2000f, travel = 800f), 1e-6f)
-    assertEquals(0f, Sidebar.progress(open = false, dx = -50f, travel = 800f), 1e-6f)
+    val j = 800f
+    val c = 600f
+    assertEquals(0.25f, Sidebar.progress(open = null, dx = 200f, journeys = j, controls = c), 1e-6f)
+    assertEquals(0.75f, Sidebar.progress(open = Side.JOURNEYS, dx = -200f, journeys = j, controls = c), 1e-6f)
+    assertEquals(1f, Sidebar.progress(open = null, dx = 2000f, journeys = j, controls = c), 1e-6f)
+    assertEquals(0f, Sidebar.progress(open = Side.JOURNEYS, dx = -2000f, journeys = j, controls = c), 1e-6f)
+  }
+
+  @Test fun `towards Controls the viewer moves left, over Controls' own travel`() {
+    val j = 800f
+    val c = 600f
+    assertEquals(-0.5f, Sidebar.progress(open = null, dx = -300f, journeys = j, controls = c), 1e-6f)
+    assertEquals(-1f, Sidebar.progress(open = null, dx = -3000f, journeys = j, controls = c), 1e-6f)
+    assertEquals(-0.5f, Sidebar.progress(open = Side.CONTROLS, dx = 300f, journeys = j, controls = c), 1e-6f)
+    // From Controls a drag only closes: it cannot carry on into Journeys.
+    assertEquals(0f, Sidebar.progress(open = Side.CONTROLS, dx = 3000f, journeys = j, controls = c), 1e-6f)
   }
 
   @Test fun `a released drag lands past halfway, or where a flick carries it`() {
-    assertFalse(Sidebar.landsOpen(open = false, dx = 300f, velocityX = 0f, travel = 800f))
-    assertTrue(Sidebar.landsOpen(open = false, dx = 500f, velocityX = 0f, travel = 800f))
+    val j = 800f
+    val c = 800f
+    assertNull(Sidebar.settle(open = null, dx = 300f, velocityX = 0f, journeys = j, controls = c))
+    assertEquals(Side.JOURNEYS, Sidebar.settle(open = null, dx = 500f, velocityX = 0f, journeys = j, controls = c))
     // 100px quickly: 100 + 2000 × 0.2 = 500 of 800.
-    assertTrue(Sidebar.landsOpen(open = false, dx = 100f, velocityX = 2000f, travel = 800f))
-    assertFalse(Sidebar.landsOpen(open = true, dx = -100f, velocityX = -2000f, travel = 800f))
+    assertEquals(Side.JOURNEYS, Sidebar.settle(open = null, dx = 100f, velocityX = 2000f, journeys = j, controls = c))
+    assertNull(Sidebar.settle(open = Side.JOURNEYS, dx = -100f, velocityX = -2000f, journeys = j, controls = c))
+    assertEquals(Side.CONTROLS, Sidebar.settle(open = null, dx = -500f, velocityX = 0f, journeys = j, controls = c))
+    assertNull(Sidebar.settle(open = Side.CONTROLS, dx = 100f, velocityX = 2000f, journeys = j, controls = c))
+  }
+
+  // ---------------------------------------------------------------- weight
+  // display-controls.md#weight: every reader line keeps its distance from the Gurmukhi.
+
+  @Test fun `at the default weight every field is drawn the same distance lighter`() {
+    val control = DesignTokens.WEIGHT_DEFAULT
+    assertEquals(500f, ReaderWeight.of(DesignTokens.WEIGHT_PRIMARY, control))
+    assertEquals(DesignTokens.WEIGHT_SECONDARY - 50f, ReaderWeight.of(DesignTokens.WEIGHT_SECONDARY, control))
+    assertEquals(DesignTokens.WEIGHT_LATIN - 50f, ReaderWeight.of(DesignTokens.WEIGHT_LATIN, control))
+  }
+
+  @Test fun `a heavier weight makes the secondary fields heavier by as much`() {
+    assertEquals(540f, ReaderWeight.of(DesignTokens.WEIGHT_SECONDARY, 650f))
+  }
+
+  @Test fun `no field leaves the font's axis`() {
+    assertEquals(900f, ReaderWeight.of(850f, DesignTokens.WEIGHT_MAX))
+    assertEquals(100f, ReaderWeight.of(100f, DesignTokens.WEIGHT_MIN))
   }
 
   // ---------------------------------------------------------------- default screen

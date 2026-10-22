@@ -70,8 +70,13 @@ enum DesignTokens {
   static let weightPrimary: Double = 550
   static let weightLatin: Double = 475
   static let weightSecondary: Double = 440
+  static let weightMin: Double = 250
+  static let weightMax: Double = 750
+  static let weightDefault: Double = 500
 
   static let ratioDefault: Double = 0.6
+  static let ratioMin: Double = 0.4
+  static let ratioMax: Double = 1
 
   static let defaultSize: Double = 28
   static let listSize: Double = 20

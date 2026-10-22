@@ -91,6 +91,11 @@ and Compose's `Icon` tints regardless. Pin the commit and record each copy here.
 | Material Symbol | Commit | Source | Licence | Copied to |
 | --- | --- | --- | --- | --- |
 | `conversion_path` | `6d7ca43bd6e6668531a00fcaca06d921b63dd716` (latest for that file on 2026-10-16) | `symbols/android/conversion_path/materialsymbolsoutlined/conversion_path_24px.xml` | Apache-2.0 | `apps/android/app/src/main/res/drawable/ic_journeys.xml` |
+| `bedtime` | `6d7ca43bd6e6668531a00fcaca06d921b63dd716` (2026-10-19) | `symbols/android/bedtime/materialsymbolsoutlined/bedtime_24px.xml` | Apache-2.0 | `apps/android/app/src/main/res/drawable/ic_appearance.xml` |
+| `settings` | `6d7ca43bd6e6668531a00fcaca06d921b63dd716` (2026-10-19) | `symbols/android/settings/materialsymbolsoutlined/settings_24px.xml` | Apache-2.0 | `apps/android/app/src/main/res/drawable/ic_settings.xml` |
+| `arrow_back` | `6d7ca43bd6e6668531a00fcaca06d921b63dd716` (2026-10-19) | `symbols/android/arrow_back/materialsymbolsoutlined/arrow_back_24px.xml` | Apache-2.0 | `apps/android/app/src/main/res/drawable/ic_back.xml` |
+| `close` | `6d7ca43bd6e6668531a00fcaca06d921b63dd716` (2026-10-19) | `symbols/android/close/materialsymbolsoutlined/close_24px.xml` | Apache-2.0 | `apps/android/app/src/main/res/drawable/ic_close.xml` |
+| `history` | `6d7ca43bd6e6668531a00fcaca06d921b63dd716` (2026-10-19) | `symbols/android/history/materialsymbolsoutlined/history_24px.xml` | Apache-2.0 | `apps/android/app/src/main/res/drawable/ic_reset.xml` |
 
 ## Icons
 
@@ -124,6 +129,7 @@ and Compose's `Icon` tints regardless. Pin the commit and record each copy here.
 | rename | `pencil` | `pencil` | 13.0 | `edit` |  |
 | remove | `circle-minus` | `minus.circle` | 13.0 | `remove_circle_outline` |  |
 | undo | `undo-2` | `arrow.uturn.backward` | 14.0 | `undo` |  |
+| reset | `rotate-ccw` | `clock.arrow.trianglehead.counterclockwise.rotate.90` | 18.0 | `history` |  |
 | share | `share` | `square.and.arrow.up` | 13.0 | `share` |  |
 | next | `chevron-right` | `chevron.forward` | 14.0 | `chevron_right` |  |
 | previous | `chevron-left` | `chevron.backward` | 14.0 | `chevron_left` |  |
@@ -165,11 +171,12 @@ and Compose's `Icon` tints regardless. Pin the commit and record each copy here.
 | rename | Rename a journey. PROPOSED. |
 | remove | Move an entry to a journey's Removed section. Not a delete. PROPOSED. |
 | undo | Restore a removed entry to its original position. PROPOSED. |
+| reset | Reset Settings' Appearance (zoom, ratio, weight) to the original settings, after a confirmation. Drawn in red. |
 | share | Share a journey — a bookmark position, or a Defined journey. PROPOSED. |
 | next | Next entry in a journey. PROPOSED. |
 | previous | Previous entry in a journey. PROPOSED. |
 | streak | Consecutive days with a complete Defined instance. PROPOSED. |
-| settings | Advanced settings, one level beyond the Controls sidebar. PROPOSED. |
-| back | Return from Settings to the Controls sidebar. PROPOSED. |
-| close | Close a tab. Removes it from the journey permanently; the timeline keeps it. PROPOSED. |
+| settings | Open Settings, from the Controls sidebar's footer row. |
+| back | Android Settings' top left on every page: closes Settings from its first page, returns to it from the others. iOS's navigation draws its own. |
+| close | Close Settings: the ✕ at the top right of its first page, on iOS only (Android uses Back). Also proposed for closing a tab, which removes it from the journey permanently; the timeline keeps it. |
 | tracked | A tracked collection or bookmark. PROPOSED. |

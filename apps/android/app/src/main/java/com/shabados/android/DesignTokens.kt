@@ -45,8 +45,13 @@ object DesignTokens {
   const val WEIGHT_PRIMARY = 550f
   const val WEIGHT_LATIN = 475f
   const val WEIGHT_SECONDARY = 440f
+  const val WEIGHT_MIN = 250f
+  const val WEIGHT_MAX = 750f
+  const val WEIGHT_DEFAULT = 500f
 
   const val RATIO_DEFAULT = 0.6f
+  const val RATIO_MIN = 0.4f
+  const val RATIO_MAX = 1f
 
   const val DEFAULT_SIZE = 28f
   const val LIST_SIZE = 20f

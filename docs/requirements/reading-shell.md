@@ -28,9 +28,12 @@ and the TV builds render the same features through different input models
 └───────────┘      └───────────┘      └───────────┘      └───────────┘
 ```
 
-**Settings sits one level beyond Controls**, not beside it. It is reached only from
-Controls and returns only to Controls, which is what keeps a rarely-visited surface
-from competing with the two that are used constantly.
+**Settings sits one level beyond Controls**, not beside it. It is reached from
+Controls and returns to Controls, which is what keeps a rarely-visited surface
+from competing with the two that are used constantly. **One accelerator skips the
+step** (2026-10-22): a long press on the viewer's Controls button opens Settings
+straight from the viewer, and closing it returns to the viewer
+([Settings](#settings)).
 
 **The viewer is the app.** It shows whatever is being read — a bani, a shabad, a
 page — and it is what the app opens to. The two sidebars are transient surfaces
@@ -102,7 +105,7 @@ viewer's edge stays in view, and the button with it; tapping it, or anywhere on 
 edge, returns to the viewer. The sidebar's header carries no second toggle. **The
 icon does not change between states**, because a changed icon reads as a different
 button, and the person is trying to get back to where they were. Whether Controls
-follows is open (`controlsActive` in [icons.md](../../packages/design/icons.md)).
+follows: it does ([the Controls sidebar](#the-controls-sidebar), 2026-10-19).
 
 **Every path back to the viewer closes the sidebar.** Tapping a journey, tapping
 `Inactive sessions`, tapping `Library`, and tapping the viewer's edge or its
@@ -375,20 +378,104 @@ there is a use case for one**, which there is not yet.
 
 ## The Controls sidebar
 
-Same shell, mirrored: header with the filled Controls toggle at the left of the
-title `Controls`, appearance control at the right. Its contents — every setting, its
-range, its default, and its persistence — are
+**Journeys, mirrored** (decided 2026-10-19). The viewer slides towards the left to
+show Controls beneath it on the right, leaving its right edge in view; tapping that
+edge, or the viewer's Controls button on it, returns to the viewer. The same
+amounts as Journeys: the edge left in view, the sidebar's fade and zoom, the light
+haptic on opening. Opening one sidebar closes the other.
+
+**One difference: with Controls open, a drag that starts on a slider or a switch is
+that control's, not the sidebar's** (2026-10-19). A sideways drag from anywhere else
+in Controls, or from the viewer's edge, closes it, as in Journeys. A closing drag
+that could start anywhere took every slide; one limited to the viewer's edge left
+too little to drag from.
+
+**A setting's whole row is its target**, here and in Settings: tapping `Pauses`
+toggles it, not only tapping its switch.
+
+**One Controls button, on the viewer**, as for Journeys: the icon does not change
+when open, and the sidebar's header carries no toggle of its own. The header is the
+title `Controls` at the left and the appearance control at the right
+([display-controls.md](display-controls.md#appearance)).
+
+**Contents** (2026-10-19): **Zoom, Ratio and Weight**, sliders, each with its
+byline (hidden at the largest text sizes: [large text](#large-text)). The preview
+and the toggles live in [Settings](#settings); the sliders are in both for now.
+
+Every setting's range, default and persistence is
 [display-controls.md](display-controls.md).
 
 **A sticky `Settings` row sits at its footer**, in the position the Journeys sidebar
-gives to `Library`. Both sidebars therefore end with the door to the deeper surface
-on their side.
+gives to `Library`, so both sidebars end with the door to the deeper surface on
+their side.
 
 ## Settings
 
-**One level to the right of Controls.** Its header carries a **`Back`** button at the
-top left, returning to Controls with the viewer to its left — so the way out is the
-way in reversed, and Settings is never a place you can get stranded in.
+**It slides up over everything, full screen**, from the Controls sidebar's `Settings`
+row (decided 2026-10-19; it had been a page one level to the right of Controls), and
+closes back to where it was opened, so it is never a place you can get stranded in.
+
+**A long press on the viewer's Controls button opens it too** (2026-10-22), with no
+sidebar open beneath, so it closes back to the viewer. An accelerator over the
+`Settings` row, not a replacement for it ([input](#input)): the long press is touch's,
+a held select is the remote's, and the screen reader offers it as an action named
+`Settings`. On iOS that button gives up the large content viewer the other bar
+buttons show on a long press at accessibility text sizes, since both would answer the
+same touch.
+Its title, `Settings`, is centred at the top. **How it closes follows the platform**:
+
+- **iOS**: a sheet, closed by swiping it down or by a ✕ at the top right of its first
+  page. Pages within it have the system's back at the top left and no ✕.
+- **Android**: a full-screen dialog with no gap at its corners. **Back at the top left
+  of every page, never a ✕**: on the first page it closes Settings, on a page within
+  it returns to the first. System Back does the same. A swipe does not close it.
+
+**Its items are menus, in groups without labels.** A menu opens a page within the
+sheet, with a way back to Settings at its top left.
+
+**The first group** (2026-10-19):
+
+| Menu | Holds |
+| --- | --- |
+| **Appearance** | A **preview** at the top, and the **Zoom, Ratio and Weight** sliders in a group fixed at the bottom; **Reset** at the top right |
+| **Display** | **Pauses**, and the two **pronunciations** |
+
+**The preview** shows what the sliders do: two lines drawn exactly as the reader
+draws them, at the reader's size, ratio and weight. Gurmukhi `ਇਹ ਉਦਾਹਰਨ ਹੈ ॥` (a space
+before the double dandi) and beneath it, as a secondary line, `Here's an example.`
+(no space before the period). **Each stays on one line**, cut short with an ellipsis
+rather than wrapping, so a large size does not push the sliders away. Fixed text, not
+taken from the bani being read, so it means the same everywhere; it will carry
+continuous and larivaar when those exist. Only Appearance has one. **It sits on the
+Settings background with no card of its own**, and grows with the size. **The sliders
+are always in view**, at the bottom, whatever the size: once the preview needs more
+room than the sliders leave it, it scrolls, and they do not move (2026-10-22; a
+large Zoom had pushed them off an iPad's Settings window). **It scrolls behind the
+sliders' group**, which covers it, **and no lower than the group's bottom edge**: it
+is never seen in the space beneath the group, and never cut off above it.
+
+**Appearance's Reset** is a red reset icon at the top right of its page, where
+nothing else sits (on iOS the page has no ✕; on Android it would have been the ✕'s
+place). It is destructive, so it asks first: **"Reset zoom, ratio, and weight?"**,
+"Your preferences will reset to the original settings.", with **Reset** (in red) and
+**Cancel**. Reset returns Ratio and Weight to their defaults and Zoom to the starting
+size this device would be given on a first launch, at its current text size setting
+([display-controls.md](display-controls.md#starting-size)). Nothing else changes.
+
+**Below the group, the appearance picker**, in a group of its own: three boxes side by
+side, labelled `Light`, `Dark` and `System` beneath, choosing the Appearance setting
+([display-controls.md](display-controls.md#appearance)).
+
+- **Each box is a small picture of the reader in that appearance**: its background,
+  two horizontal bars at the top left in its text colour, standing for lines, and
+  three circles at the bottom right in its three vishraam colours. The circles show
+  whether or not Pauses is on: they illustrate the appearance, not the setting.
+- **`System` is split on a diagonal**: Light's picture in the top-left half, with its
+  bars, and Dark's in the bottom-right half, black, with its circles.
+- **Each label stays on one line**, cut short with an ellipsis at the largest text
+  sizes rather than broken across two (`Sys-tem`, 2026-10-22).
+- **The chosen box has a blue outline and a blue label**, in the platform's own blue
+  (iOS's system blue; on Android, which has none, the app's `ui` colour).
 
 **It holds what Controls deliberately does not**: things set once and rarely, or set
 by someone who wants more than the app assumes.
@@ -404,6 +491,52 @@ by someone who wants more than the app assumes.
 **Nothing here is required to use the app.** Every option has a working default, and
 a person who never opens Settings must not encounter a feature that is inert until
 they do.
+
+**On a tablet, Controls closes before Settings opens** (iPad, 2026-10-19): Settings
+is a window over the reader there, not a full-screen sheet, and it would otherwise
+sit over a sidebar half-covered. On a phone Controls stays open beneath, to come back
+to.
+
+## Large text
+
+The interface follows the platform's text size, **within limits that keep
+Appearance's preview in view** (2026-10-19). Interface text is Journeys, Controls
+and Settings. **Never the reader or the preview**, which Zoom sizes, and never the
+bars, which stay at the default size on iOS ([header](#header)).
+
+The goal on Appearance's page: **the sliders' group starts no higher than halfway
+down the screen**, at every text size and display size, so the preview keeps the
+top half.
+
+**Appearance's page measures, on both platforms**, and takes the first layout whose
+group starts halfway down or lower:
+
+1. title, byline, slider, stacked;
+2. the same without bylines;
+3. **compact rows**: the title and the slider on one line, the title's size capped
+   (about Body at Android's Font size 4 of 7; Headline at iOS's xxxLarge) so the
+   slider keeps its length. Used even when it does not fit, as in landscape: it is
+   the least the sliders take.
+
+The text size alone does not say which fits:
+
+- **iOS** (iPhone and iPad alike): interface text grows **no further than
+  Accessibility 3**, and **from Accessibility 1 on, the sliders' bylines are
+  hidden**, everywhere the sliders show. Even so, the stacked sliders took more than
+  half of an iPad's Settings window, which is shorter than the screen (2026-10-22).
+- **Android**: Font size and Display size together set what fits, and neither
+  predicts it alone. On a Pixel 7a, Font size 7 of 7 fitted with bylines at Display
+  size 1 of 5, while Font size 1 did not at Display size 5: the sliders themselves
+  grow with Display size, and the screen gets shorter.
+
+The Controls sidebar scrolls and always stacks its sliders; on Android it always
+shows the bylines. **Its `Settings` row stays in view at every text size**: the
+sliders scroll, the row does not.
+
+**The default screen scrolls when it does not fit**, on both platforms, as at the
+largest text sizes. On iOS it had not, and being taller than the screen it made the
+shell taller too, moving the Controls sidebar, and its `Settings` row, down past the
+bottom (2026-10-22). Whatever the viewer holds, it is the size of the screen.
 
 ## About, links, and feedback
 
@@ -438,6 +571,9 @@ list, not a new one, is what should be presented.
   days is offered and at 14 is not.
 - **Empty states.** No journeys at all ⇒ the default screen shows the greeting with
   no `continue reading`; `Inactive sessions` renders an empty list without crashing.
+- **Settings from the viewer.** A long press on the viewer's Controls button opens
+  Settings with no sidebar open; closing it shows the viewer, not Controls. A tap
+  still opens Controls, and the touch that held the long press does not also tap.
 - **Long labels.** A renamed journey with a 200-character label must not break row
   layout in either the sidebar or `Inactive sessions`.
 

@@ -1,0 +1,15 @@
+<!-- Material Symbols `arrow_back` (outlined, 24px), Apache-2.0, from
+     google/material-design-icons@6d7ca43bd6e6668531a00fcaca06d921b63dd716,
+     symbols/android/arrow_back/materialsymbolsoutlined/arrow_back_24px.xml.
+     One change: upstream's android:tint="?attr/colorControlNormal" is removed,
+     as in ic_journeys.xml. See packages/design/icons.md, "Android drawables". -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="960"
+    android:viewportHeight="960"
+    android:autoMirrored="true">
+  <path
+      android:fillColor="@android:color/white"
+      android:pathData="M313,520L537,744L480,800L160,480L480,160L537,216L313,440L800,440L800,520L313,520Z"/>
+</vector>

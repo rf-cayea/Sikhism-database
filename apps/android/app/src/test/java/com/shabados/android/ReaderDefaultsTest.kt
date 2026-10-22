@@ -7,7 +7,7 @@ import org.junit.Test
 
 /**
  * What the reader shows before the person changes anything. These are what an
- * unwritten [ReaderSettings] value falls back to, on every launch until it is set.
+ * unwritten [ReaderControls] value falls back to, on every launch until it is set.
  *
  * What this cannot check: that a changed setting survives a relaunch. That is
  * SharedPreferences, checked by hand (README.md#tests).
@@ -29,5 +29,10 @@ class ReaderDefaultsTest {
     // both platforms start from packages/design/tokens.md.
     assertEquals(DesignTokens.RATIO_DEFAULT, ReaderDefaults.RATIO)
     assertEquals(0.6f, ReaderDefaults.RATIO)
+  }
+
+  @Test fun `weight starts at 500`() {
+    // display-controls.md#weight, decided 2026-10-19.
+    assertEquals(500f, ReaderDefaults.WEIGHT)
   }
 }

@@ -80,6 +80,7 @@ a focusable target. A blank cell is a feature that does not exist on some device
 | Go back / dismiss | Back gesture | Click outside, or a close control | `esc` | Back |
 | Open a sidebar | Header button, or horizontal drag | Header button | Header button, plus a shortcut | Focus the header button |
 | Close a sidebar | Its toggle, a tap on the viewer's edge, or drag back | Its toggle | `esc`, or the toggle | Back, or the toggle |
+| Open Settings from the viewer | Long-press the Controls button | Right-click the Controls button | Long-press `enter` on it, or a menu key | Long-press select on it |
 | Choose from an enumerated setting | Platform-native menu or sheet | Menu or popover | Focus and arrow through | Focus and arrow through |
 | Change zoom | Pinch, or the slider | Scroll with modifier, or the slider | `⌘=` / `⌘-`, or the slider | Focus the slider, arrows |
 | Presenter continuous advance | Drag and hold; rate rises with distance | Press and hold | Hold an arrow; rate rises with duration | Hold an arrow |

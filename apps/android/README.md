@@ -318,7 +318,10 @@ measures and draws.
   reader's state, the activity, or the first composition, not on every commit. It
   does not judge how quickly the screen rotates. It opens banis from the Journeys
   sidebar by their Gurmukhi names, and keeps the screen on for its run: a 30s screen
-  timeout put a phone to sleep partway through. 11/11 on a Pixel 7a 2026-10-16.
+  timeout put a phone to sleep partway through. 11/11 on a Pixel 7a 2026-10-16. **Out
+  of date since 2026-10-19:** it reads and sets Pauses and Latin through the reader's
+  stand-in Controls menu, which the Controls sidebar replaced; those steps need
+  rewriting against the sidebar's switches before it is run again.
 - **Leave with Home or Back.** With the sidebar closed, Back leaves the app, which
   moves it to the background rather than finishing it.
 - **Start the app from its icon before testing a return through the icon.**

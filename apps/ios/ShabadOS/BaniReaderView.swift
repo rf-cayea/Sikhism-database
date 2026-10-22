@@ -46,9 +46,90 @@ extension DesignTokens {
   }
 }
 
+/// How the reader's text is set under the `Weight` control
+/// (docs/requirements/display-controls.md#weight), shared with the Controls
+/// sidebar's preview so the two cannot drift.
+///
+/// **Every reader line keeps its distance from the Gurmukhi line.** The tokens give
+/// each field's weight relative to `weightPrimary`; the control replaces
+/// `weightPrimary` and every field moves with it, kept inside the font's axis.
+enum ReaderType {
+  /// `token`'s field drawn at the control's `control` value.
+  static func weight(_ token: Double, control: Double) -> Double {
+    min(900, max(100, token + control - DesignTokens.weightPrimary))
+  }
+
+  /// A Latin secondary line (a Latin pronunciation, a translation): the system
+  /// font at `weightLatin`'s place under the control.
+  static func latin(size: Double, control: Double) -> Font {
+    let axis = weight(DesignTokens.weightLatin, control: control)
+    return Font(UIFont.systemFont(ofSize: size, weight: systemWeight(axis)))
+  }
+
+  /// The system font's weight for a CSS-style axis value. San Francisco is variable,
+  /// so any value between the named weights is drawn; these are the named weights'
+  /// own values, joined in straight lines.
+  private static func systemWeight(_ axis: Double) -> UIFont.Weight {
+    let stops: [(Double, CGFloat)] = [
+      (100, UIFont.Weight.ultraLight.rawValue), (200, UIFont.Weight.thin.rawValue),
+      (300, UIFont.Weight.light.rawValue), (400, UIFont.Weight.regular.rawValue),
+      (500, UIFont.Weight.medium.rawValue), (600, UIFont.Weight.semibold.rawValue),
+      (700, UIFont.Weight.bold.rawValue), (800, UIFont.Weight.heavy.rawValue),
+      (900, UIFont.Weight.black.rawValue),
+    ]
+    let upper = stops.firstIndex { $0.0 >= axis } ?? stops.count - 1
+    guard upper > 0 else { return UIFont.Weight(stops[0].1) }
+    let (a, wa) = stops[upper - 1]
+    let (b, wb) = stops[upper]
+    let t = CGFloat((axis - a) / (b - a))
+    return UIFont.Weight(wa + (wb - wa) * t)
+  }
+}
+
+/// The viewer header's Controls button: a glass circle, as the Journeys button is
+/// (`ViewerBar`). One icon whether or not Controls is open
+/// (docs/requirements/reading-shell.md#the-controls-sidebar).
+///
+/// **A long press opens Settings** (`onLongPress`; reading-shell.md#settings).
+/// VoiceOver offers it as the action `Settings`.
+///
+/// **No large content viewer**, unlike the other bar buttons: at accessibility text
+/// sizes it takes a long press too, and the two would answer the same touch. Settings
+/// is the more useful answer, and the icon is the one Controls' own header repeats.
+struct ControlsButton: View {
+  let action: () -> Void
+  let onLongPress: () -> Void
+
+  /// Set when a long press has opened Settings, so the touch that held it is not
+  /// also a tap when it lifts: a `Button` fires on lifting however long it was
+  /// held. Cleared as each press begins.
+  @State private var longPressed = false
+
+  var body: some View {
+    Button {
+      guard !longPressed else { return }
+      action()
+    } label: {
+      ScaledLucide(AppIcons.controls)
+    }
+    .simultaneousGesture(
+      LongPressGesture()
+        .onChanged { _ in longPressed = false }
+        .onEnded { _ in
+          longPressed = true
+          onLongPress()
+        }
+    )
+    .sensoryFeedback(.impact(weight: .medium), trigger: longPressed) { _, pressed in pressed }
+    .accessibilityLabel("Controls")
+    .accessibilityAction(named: "Settings", onLongPress)
+    .barCircle(largeContentViewer: false)
+  }
+}
+
 /// Shared sizing for `readerCardBackground` — see its own doc comment for
 /// what "the reader's card treatment" means.
-private enum ReaderCard {
+enum ReaderCard {
   /// **Half of the reader's own outer gutter.** `BaniReaderView.body`'s
   /// `ScrollView` content takes a bare `.padding()` — the system default,
   /// 16pt. A card bleeds outward by half of that on each side, so it reads
@@ -218,6 +299,10 @@ struct BaniReaderView: View {
   let startLine: String?
   /// The header's Journeys button; `ReaderShell` opens or closes the sidebar.
   let onJourneys: () -> Void
+  /// The header's Controls button; `ReaderShell` opens or closes that sidebar.
+  let onControls: () -> Void
+  /// A long press on the Controls button; `ReaderShell` opens Settings.
+  let onSettings: () -> Void
 
   // fileprivate, not private: `ContinuationBlock` (a separate type in this
   // same file) needs it too, to report its Expand button's frame into the
@@ -241,6 +326,10 @@ struct BaniReaderView: View {
   /// Secondary text as a fraction of the Gurmukhi size — the `Ratio` control,
   /// 0.4 to 1.0 (docs/requirements/display-controls.md#ratio).
   @AppStorage("ratio") private var ratio = DesignTokens.ratioDefault
+
+  /// The Gurmukhi line's weight — the `Weight` control; every other line keeps its
+  /// distance from it (`ReaderType`, docs/requirements/display-controls.md#weight).
+  @AppStorage("weight") private var weight = DesignTokens.weightDefault
 
   private var schemes: [Pronunciation] {
     Pronunciation.allCases.filter {
@@ -434,7 +523,7 @@ struct BaniReaderView: View {
     // No bar background: the text scrolls up under the buttons, with nothing
     // blurred or tinted behind them.
     .safeAreaBar(edge: .top) {
-      ViewerBar(title: bani.latin, onJourneys: onJourneys) { controlsStandIn }
+      ViewerBar(title: bani.latin, onJourneys: onJourneys) { ControlsButton(action: onControls, onLongPress: onSettings) }
     }
   }
 
@@ -448,6 +537,7 @@ struct BaniReaderView: View {
         pauses: pauses,
         schemes: schemes,
         ratio: ratio,
+        weight: weight,
         precededByTitle: precededByTitle,
         gurmukhiFrame: (rowFrames, RowFrames.gurmukhiPrefix + item.id)
       )
@@ -463,6 +553,7 @@ struct BaniReaderView: View {
         pauses: pauses,
         schemes: schemes,
         ratio: ratio,
+        weight: weight,
         highlighted: highlightedLineID == item.id,
         frames: rowFrames,
         toggle: { expandedContinuations.insert(continuation.id) }
@@ -574,26 +665,6 @@ struct BaniReaderView: View {
         highlightedLineID = nil
       }
     }
-  }
-
-  /// A stand-in for the Controls sidebar, which does not exist yet
-  /// (docs/requirements/reading-shell.md#the-controls-sidebar). Here only so the
-  /// settings can be exercised; it is not the specified surface and should be
-  /// deleted when that one lands.
-  private var controlsStandIn: some View {
-    Menu {
-      Toggle("Pauses", isOn: $pauses)
-      Section("Pronunciations") {
-        Toggle(Pronunciation.devanagari.label, isOn: $pronDevanagari)
-        Toggle(Pronunciation.latin.label, isOn: $pronLatin)
-      }
-    } label: {
-      ScaledLucide(AppIcons.controls)
-    }
-    // A glass circle, as the Journeys button is (`ViewerBar`).
-    .menuStyle(.button)
-    .barCircle()
-    .accessibilityLabel("Controls")
   }
 
   /// How strongly the size follows the fingers. The size changes by the pinch's
@@ -780,6 +851,8 @@ private struct LineText: View {
   let pauses: Bool
   let schemes: [Pronunciation]
   let ratio: Double
+  /// The `Weight` control's value; see `ReaderType`.
+  let weight: Double
   /// Was the immediately preceding row also a title-styled line? Two adjacent
   /// titles (e.g. the mool mantar, then a heading, then another heading —
   /// a real bundled sequence in `BNCP`/`RHRS`) previously each contributed
@@ -826,7 +899,7 @@ private struct LineText: View {
       cursor = upper
     }
     if cursor < scalars.count { out += segment(cursor..<scalars.count) }
-    return line.isMoolmantar ? Self.layingOutMoolmantar(out, bodySize: size) : out
+    return line.isMoolmantar ? Self.layingOutMoolmantar(out, bodySize: size, weight: weight) : out
   }
 
   /// Lays the mool mantar out as `ੴ` alone on its own line, then its six
@@ -899,7 +972,7 @@ private struct LineText: View {
   /// than mutating `attributed` in place — every slice is read from the
   /// untouched original, so there is no risk of an earlier edit invalidating
   /// an index a later one depends on.
-  private static func layingOutMoolmantar(_ attributed: AttributedString, bodySize: Double) -> AttributedString {
+  private static func layingOutMoolmantar(_ attributed: AttributedString, bodySize: Double, weight: Double) -> AttributedString {
     var spaces: [AttributedString.Index] = []
     var searchStart = attributed.startIndex
     while let space = attributed.characters[searchStart...].firstIndex(of: " ") {
@@ -920,7 +993,7 @@ private struct LineText: View {
         piece.font = Fonts.variable(
           Fonts.gurmukhi,
           size: bodySize * Title.ikOankarSizeRatio,
-          weight: Title.ikOankarWeight
+          weight: ReaderType.weight(Title.ikOankarWeight, control: weight)
         )
       }
       out += piece
@@ -1009,7 +1082,7 @@ private struct LineText: View {
           Fonts.variable(
             Fonts.gurmukhi,
             size: isTitle ? titleSize : size,
-            weight: isTitle ? Title.weight : DesignTokens.weightPrimary
+            weight: ReaderType.weight(isTitle ? Title.weight : DesignTokens.weightPrimary, control: weight)
           )
         )
         .foregroundStyle(DesignTokens.foreground)
@@ -1034,8 +1107,8 @@ private struct LineText: View {
         let secondary = size * ratio
         Text(Transliteration.of(line, scheme))
           .font(scheme == .devanagari
-            ? Fonts.variable(Fonts.gurmukhi, size: secondary, weight: DesignTokens.weightSecondary)
-            : .system(size: secondary, weight: .medium))
+            ? Fonts.variable(Fonts.gurmukhi, size: secondary, weight: ReaderType.weight(DesignTokens.weightSecondary, control: weight))
+            : ReaderType.latin(size: secondary, control: weight))
           .foregroundStyle(DesignTokens.foregroundMuted)
           .multilineTextAlignment(isTitle ? .center : .leading)
       }
@@ -1087,6 +1160,8 @@ private struct ContinuationBlock: View {
   let pauses: Bool
   let schemes: [Pronunciation]
   let ratio: Double
+  /// The `Weight` control's value; see `ReaderType`.
+  let weight: Double
   /// Whether this card is the tapped row, so it can show the highlight itself
   /// (see the end of `body`).
   let highlighted: Bool
@@ -1192,7 +1267,7 @@ private struct ContinuationBlock: View {
     VStack(alignment: .leading, spacing: Self.previewLineSpacing) {
       ForEach(continuation.lines.prefix(Self.previewLineCount)) { line in
         Text(line.gurmukhi)
-          .font(Fonts.variable(Fonts.gurmukhi, size: size, weight: DesignTokens.weightPrimary))
+          .font(Fonts.variable(Fonts.gurmukhi, size: size, weight: ReaderType.weight(DesignTokens.weightPrimary, control: weight)))
           .foregroundStyle(DesignTokens.foregroundMuted)
       }
     }

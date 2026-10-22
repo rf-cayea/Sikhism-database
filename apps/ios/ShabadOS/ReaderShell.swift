@@ -62,6 +62,20 @@ final class ReadingPosition {
   var line: String?
 }
 
+/// Where the Controls sidebar's sliders and switches are, in `ReaderShell.space`, so
+/// the sidebar drag leaves a drag that starts on one to that control
+/// (reading-shell.md#the-controls-sidebar).
+///
+/// **A plain class, deliberately not observed**, like `ActivityClock`: frames are
+/// written as the panel lays out and read only when a drag starts.
+final class ControlFrames {
+  var frames: [String: CGRect] = [:]
+
+  func contains(_ point: CGPoint) -> Bool {
+    frames.values.contains { $0.contains(point) }
+  }
+}
+
 /// Whether the reader's pinch is in progress, so the sidebar drag can stand aside
 /// for it: two fingers spreading sideways would otherwise read as a drag.
 ///
@@ -70,9 +84,14 @@ final class PinchFlag {
   var active = false
 }
 
-/// The app: the viewer, lying over the Journeys sidebar. "The viewer is the app"
-/// (docs/requirements/reading-shell.md): it is what the app opens to, and the
-/// sidebar is never a destination of its own.
+/// The app: the viewer, lying over the Journeys sidebar on its left and the
+/// Controls sidebar on its right. "The viewer is the app"
+/// (docs/requirements/reading-shell.md): it is what the app opens to, and neither
+/// sidebar is a destination of its own.
+///
+/// **Controls is Journeys mirrored** (reading-shell.md#the-controls-sidebar): the
+/// viewer slides left instead of right, by the same rules. Everything below that
+/// says "Journeys" holds for Controls on the other side. At most one is open.
 ///
 /// **Opening Journeys slides the viewer aside** to show the sidebar beneath it,
 /// leaving at least `peek` of the viewer's inner edge in view, faded towards the
@@ -92,7 +111,8 @@ struct ReaderShell: View {
   /// What the default screen's `continue reading` offers, while `LastRead` allows;
   /// restored from what was saved when the app starts.
   @State private var previous: LastRead? = LastRead.saved().flatMap { $0.offered(now: .now) ? $0 : nil }
-  @State private var journeysOpen = false
+  /// The sidebar showing, if any; at most one at a time.
+  @State private var openSide: Side?
   /// The drag's horizontal travel while it is moving the viewer; nil otherwise.
   @State private var dragX: CGFloat?
   /// What the current drag was judged to be, once it has moved far enough to tell.
@@ -103,12 +123,24 @@ struct ReaderShell: View {
   @State private var pinch = PinchFlag()
   /// `@State` only to keep one instance for the view's lifetime.
   @State private var position = ReadingPosition()
+  /// `@State` only to keep one instance for the view's lifetime.
+  @State private var controlFrames = ControlFrames()
+  /// Settings, as a sheet over everything (reading-shell.md#settings).
+  @State private var settingsShown = false
+  @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+  /// The shell's own coordinate space, the whole screen: where a drag starts and
+  /// where `ControlFrames` are measured.
+  static let space = "ReaderShell"
   /// The line a new reader opens at: where `continue reading` left off, or nil for
   /// the top.
   @State private var startLine: String?
   @Environment(\.scenePhase) private var scenePhase
 
   private enum DragAxis { case horizontal, other }
+
+  /// Which sidebar: Journeys on the left, Controls on the right.
+  private enum Side { case journeys, controls }
 
   /// Settled in docs/requirements/journeys.md#journeys: 15 minutes without
   /// activity ends a journey, including while the app is open.
@@ -119,15 +151,16 @@ struct ReaderShell: View {
   private static let peek: CGFloat = 72
 
   /// How far the viewer slides, which is also the sidebar's width: **the screen's
-  /// short side less `peek`, plus the inset at its leading edge**, so the sidebar's
-  /// contents are as wide in landscape as in portrait (decided 2026-10-16). In
-  /// landscape the viewer then leaves more than `peek` in view.
+  /// short side less `peek`, plus the inset at the sidebar's outer edge**, so the
+  /// sidebar's contents are as wide in landscape as in portrait (decided
+  /// 2026-10-16). In landscape the viewer then leaves more than `peek` in view.
   ///
-  /// The inset is the Dynamic Island's when it is on the left. The panel is padded
-  /// clear of it inside this width, so without adding it back the panel was that
-  /// much narrower in landscape (2026-10-19). In portrait it is 0.
-  static func travel(width: CGFloat, height: CGFloat, leadingInset: CGFloat) -> CGFloat {
-    max(0, min(width, height) - peek + leadingInset)
+  /// The inset is the Dynamic Island's when it is on that side: the leading inset
+  /// for Journeys, the trailing for Controls. The panel is padded clear of it inside
+  /// this width, so without adding it back the panel was that much narrower in
+  /// landscape (2026-10-19). In portrait it is 0.
+  static func travel(width: CGFloat, height: CGFloat, edgeInset: CGFloat) -> CGFloat {
+    max(0, min(width, height) - peek + edgeInset)
   }
   /// How far a drag moves before it is judged horizontal or not. Below this a
   /// finger has not said which way it is going.
@@ -156,7 +189,7 @@ struct ReaderShell: View {
   /// The sidebar's colour: `backgroundBase`, white in light mode and #222 in
   /// dark (chosen 2026-10-16), so it reads apart from the page-coloured viewer.
   /// Android uses the same token (packages/design/tokens.md#colour).
-  fileprivate static let sidebarBackground = DesignTokens.backgroundBase
+  static let sidebarBackground = DesignTokens.backgroundBase
 
   /// The least corner radius the viewer keeps while it is moved; see `cardShape`.
   /// The display radius of the iPhone it was checked on (2026-10-16).
@@ -176,9 +209,14 @@ struct ReaderShell: View {
       let insets = geometry.safeAreaInsets
       let screenWidth = geometry.size.width + insets.leading + insets.trailing
       let screenHeight = geometry.size.height + insets.top + insets.bottom
-      let travel = Self.travel(width: screenWidth, height: screenHeight, leadingInset: insets.leading)
-      let progress = openness(travel: travel)
-      let sidebarScale = Self.sidebarScale(progress)
+      let travelJ = Self.travel(width: screenWidth, height: screenHeight, edgeInset: insets.leading)
+      let travelC = Self.travel(width: screenWidth, height: screenHeight, edgeInset: insets.trailing)
+      // Signed: towards 1 as the viewer moves right to show Journeys, towards -1 as
+      // it moves left to show Controls. `amount` is how far, whichever way.
+      let progress = openness(journeys: travelJ, controls: travelC)
+      let amount = abs(progress)
+      let sidebarScale = Self.sidebarScale(amount)
+      let offset = progress >= 0 ? travelJ * progress : travelC * progress
 
       // Two whole screens, one over the other, each a rigid card the size of the
       // display.
@@ -201,13 +239,14 @@ struct ReaderShell: View {
         ZStack(alignment: .leading) {
           Self.sidebarBackground.ignoresSafeArea()
           JourneysPanel(readingID: baniID, open: open)
+            .dynamicTypeSize(...InterfaceText.cap)
             // Clear of the Dynamic Island in landscape, by the measured inset.
             // Inside the width, so the sidebar stays as wide.
             .padding(.leading, insets.leading)
             .safeAreaPadding(.top, insets.top)
             .safeAreaPadding(.bottom, insets.bottom)
             // As wide as the viewer leaves uncovered, so nothing in it sits under the peek.
-            .frame(width: travel)
+            .frame(width: travelJ)
             // Grows to full size as the viewer slides, outward from its right
             // edge: its top rises, its bottom falls and its left edge moves left. Only the panel scales; the
             // colour behind it stays full screen, so no edge shows.
@@ -226,10 +265,38 @@ struct ReaderShell: View {
         // Washed in its own colour rather than dimmed towards black, so it reads
         // the same in light and dark.
         .overlay {
-          Self.sidebarBackground.opacity(1 - Self.sidebarStrength(progress))
+          Self.sidebarBackground.opacity(1 - Self.sidebarStrength(amount))
             .ignoresSafeArea()
             .allowsHitTesting(false)
         }
+        // Only the sidebar the viewer is moving away from shows; at rest neither
+        // is in view, and Journeys stays beneath.
+        .opacity(progress >= 0 ? 1 : 0)
+        .allowsHitTesting(openSide == .journeys)
+
+        // Beneath, on the other side: Controls, the same in mirror image.
+        ZStack(alignment: .trailing) {
+          Self.sidebarBackground.ignoresSafeArea()
+          ControlsPanel(frames: controlFrames, onSettings: showSettings)
+            .dynamicTypeSize(...InterfaceText.cap)
+            .padding(.trailing, insets.trailing)
+            .safeAreaPadding(.top, insets.top)
+            .safeAreaPadding(.bottom, insets.bottom)
+            .frame(width: travelC)
+            // Grows outward from its left edge, the side the viewer leaves from.
+            .geometryGroup()
+            .visualEffect { content, _ in
+              content.scaleEffect(sidebarScale, anchor: .leading)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+        .overlay {
+          Self.sidebarBackground.opacity(1 - Self.sidebarStrength(amount))
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
+        }
+        .opacity(progress < 0 ? 1 : 0)
+        .allowsHitTesting(openSide == .controls)
 
         viewer
         // The measured insets, fixed while the viewer moves (see above).
@@ -237,6 +304,10 @@ struct ReaderShell: View {
         .safeAreaPadding(.bottom, insets.bottom)
         .padding(.leading, insets.leading)
         .padding(.trailing, insets.trailing)
+        // **Exactly the screen, whatever the viewer holds.** Content taller than
+        // the screen made this card, and so the stack, taller, and the sidebars,
+        // centred in the stack, moved down with it (2026-10-22).
+        .frame(width: screenWidth, height: screenHeight)
         // **The fill, wash, mask and hairline are views filling the card's frame,
         // with no safe-area behaviour of their own.** The frame is already the
         // whole screen. `.background(_:)` with a colour, and `.ignoresSafeArea()`,
@@ -246,39 +317,40 @@ struct ReaderShell: View {
         // colour, until dragged clear of the Island (iPhone, landscape, 2026-10-19).
         .background { DesignTokens.background }
         .overlay {
-          DesignTokens.background.opacity(0.6 * progress)
+          DesignTokens.background.opacity(0.6 * amount)
             .allowsHitTesting(false)
         }
-        .mask { cardShape(moved: progress > 0) }
+        .mask { cardShape(moved: progress != 0) }
         // A hairline along the viewer's edge, so it reads as a card's edge, not
         // only a shadow's.
         .overlay {
-          cardShape(moved: progress > 0)
-            .stroke(DesignTokens.foreground.opacity(0.08 * progress), lineWidth: 0.5)
+          cardShape(moved: progress != 0)
+            .stroke(DesignTokens.foreground.opacity(0.08 * amount), lineWidth: 0.5)
             .allowsHitTesting(false)
         }
-        .shadow(color: .black.opacity(0.18 * progress), radius: 24)
+        .shadow(color: .black.opacity(0.18 * amount), radius: 24)
         // Moved when drawn, not laid out somewhere else: see `cardShape`. Its
         // layout stays where it was, so it takes no touches once moved; the
         // sidebar beneath does, and the edge below returns to it.
-        .visualEffect { content, _ in content.offset(x: travel * progress) }
+        .visualEffect { content, _ in content.offset(x: offset) }
         .allowsHitTesting(progress == 0)
         // A horizontal drag moves the viewer; stop it scrolling meanwhile.
         .scrollDisabled(dragX != nil)
 
-        // While open, the visible edge, Journeys button included, is one target
+        // While open, the visible edge, its header button included, is one target
         // that returns to the viewer.
-        if journeysOpen && dragX == nil {
+        if let openSide, dragX == nil {
           Color.clear
             .contentShape(Rectangle())
             // All of the viewer still in view: the peek in portrait, more in landscape.
-            .frame(width: max(0, screenWidth - travel))
-            .frame(maxWidth: .infinity, alignment: .trailing)
+            .frame(width: max(0, screenWidth - (openSide == .journeys ? travelJ : travelC)))
+            .frame(maxWidth: .infinity, alignment: openSide == .journeys ? .trailing : .leading)
             .ignoresSafeArea()
-            .onTapGesture { setJourneys(open: false) }
+            .onTapGesture { setSide(nil) }
         }
       }
-      .simultaneousGesture(sidebarDrag(travel: travel))
+      .simultaneousGesture(sidebarDrag(journeys: travelJ, controls: travelC))
+      .coordinateSpace(name: Self.space)
       // Both layers span the whole screen, so the viewer is one rigid card whose
       // corners are the display's (`cardShape`). Their contents take the insets
       // as fixed padding instead, above.
@@ -289,8 +361,11 @@ struct ReaderShell: View {
     .onChange(of: keepsScreenOn, initial: true) { _, on in
       UIApplication.shared.isIdleTimerDisabled = on
     }
+    // Swiped down or closed by its ✕, back to where it was opened: Controls, or
+    // the viewer after a long press on its Controls button.
+    .sheet(isPresented: $settingsShown) { SettingsView() }
     // On opening only (chosen 2026-10-16).
-    .sensoryFeedback(.impact(weight: .light), trigger: journeysOpen) { _, isOpen in isOpen }
+    .sensoryFeedback(.impact(weight: .light), trigger: openSide) { old, new in new != nil && new != old }
     .onReceive(idleCheck) { _ in refresh() }
     .onChange(of: scenePhase) { _, phase in
       if phase == .active { refresh() }
@@ -324,41 +399,72 @@ struct ReaderShell: View {
   /// (docs/requirements/reading-shell.md#the-screen-stays-awake-while-content-is-read).
   /// The 15-minute limit needs nothing here: going idle ends the journey, which
   /// closes the content. Android's `ShellState.keepsScreenOn` is the same rule.
-  private var keepsScreenOn: Bool { baniID != nil && !journeysOpen }
+  private var keepsScreenOn: Bool { baniID != nil && openSide == nil }
 
   @ViewBuilder
   private var viewer: some View {
     if let bani = Self.bani(baniID) {
-      BaniReaderView(bani: bani, activity: activity, pinch: pinch, position: position, startLine: startLine) {
-        setJourneys(open: !journeysOpen)
-      }
+      BaniReaderView(
+        bani: bani,
+        activity: activity,
+        pinch: pinch,
+        position: position,
+        startLine: startLine,
+        onJourneys: { toggle(.journeys) },
+        onControls: { toggle(.controls) },
+        onSettings: showSettingsFromViewer
+      )
         // A different bani is a new reader: its row frames, held line and
         // expanded continuations all belong to the bani they were read from.
         .id(bani.id)
     } else {
-      DefaultScreen(continueWith: Self.bani(previous?.id), open: open, onContinue: resume) {
-        setJourneys(open: !journeysOpen)
-      }
+      DefaultScreen(
+        continueWith: Self.bani(previous?.id),
+        open: open,
+        onContinue: resume,
+        onJourneys: { toggle(.journeys) },
+        onControls: { toggle(.controls) },
+        onSettings: showSettingsFromViewer
+      )
     }
   }
 
-  /// 0 with the viewer covering the sidebar, 1 with it aside; between while dragged.
-  private func openness(travel: CGFloat) -> CGFloat {
-    let base: CGFloat = journeysOpen ? 1 : 0
-    guard let dragX, travel > 0 else { return base }
-    return min(1, max(0, base + dragX / travel))
+  /// Where the viewer is: 0 covering both sidebars, 1 aside for Journeys, -1 aside
+  /// for Controls; between while dragged. A drag from rest goes whichever way the
+  /// finger does; from open it can only close.
+  private func openness(journeys: CGFloat, controls: CGFloat) -> CGFloat {
+    let base = Self.base(openSide)
+    guard let dragX else { return base }
+    let towardsJourneys = base > 0 || (base == 0 && dragX > 0)
+    let travel = towardsJourneys ? journeys : controls
+    guard travel > 0 else { return base }
+    let moved = base + dragX / travel
+    return towardsJourneys ? min(1, max(0, moved)) : min(0, max(-1, moved))
   }
 
-  /// A drag anywhere opens or closes Journeys: rightward on the viewer, leftward
-  /// on the sidebar or the viewer's edge. On iOS it may start at the screen edge
-  /// as well as inside the content: the reader has no back button, so there is no
-  /// system back-swipe to collide with (docs/interaction.md).
+  private static func base(_ side: Side?) -> CGFloat {
+    switch side {
+    case .journeys: 1
+    case .controls: -1
+    case nil: 0
+    }
+  }
+
+  /// A drag anywhere opens or closes a sidebar: rightward on the viewer opens
+  /// Journeys, leftward opens Controls, and the opposite way on an open sidebar or
+  /// the viewer's edge closes it. On iOS it may start at the screen edge as well as
+  /// inside the content: the reader has no back button, so there is no system
+  /// back-swipe to collide with (docs/interaction.md).
   ///
   /// **Only a horizontal drag counts**, judged once it has moved `dragDecision`:
   /// anything steeper is a scroll and is left alone for its whole length. A drag
   /// that has started is dropped if a pinch begins.
-  private func sidebarDrag(travel: CGFloat) -> some Gesture {
-    DragGesture(minimumDistance: 0)
+  ///
+  /// **With Controls open, a drag that starts on a slider or switch is that
+  /// control's** (`ControlFrames`); from anywhere else it closes Controls
+  /// (reading-shell.md#the-controls-sidebar).
+  private func sidebarDrag(journeys: CGFloat, controls: CGFloat) -> some Gesture {
+    DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.space))
       .onChanged { value in
         if pinch.active {
           dragAxis = .other
@@ -370,7 +476,16 @@ struct ReaderShell: View {
         if dragAxis == nil {
           guard max(abs(dx), abs(dy)) >= Self.dragDecision else { return }
           // The direction must be one that can move the viewer from where it is.
-          let towardsChange = journeysOpen ? dx < 0 : dx > 0
+          if openSide == .controls && controlFrames.contains(value.startLocation) {
+            dragAxis = .other
+            return
+          }
+          let towardsChange: Bool
+          switch openSide {
+          case .journeys: towardsChange = dx < 0
+          case .controls: towardsChange = dx > 0
+          case nil: towardsChange = true
+          }
           dragAxis = abs(dx) > abs(dy) * 1.5 && towardsChange ? .horizontal : .other
         }
         guard dragAxis == .horizontal else { return }
@@ -378,14 +493,24 @@ struct ReaderShell: View {
       }
       .onEnded { value in
         defer { dragAxis = nil }
-        guard dragAxis == .horizontal, travel > 0 else { return }
+        guard dragAxis == .horizontal else { return }
         // Where a flick would carry it, not only where the finger lifted, so a
         // short quick drag still opens or closes.
-        let base: CGFloat = journeysOpen ? 1 : 0
-        let landing = base + value.predictedEndTranslation.width / travel
+        let base = Self.base(openSide)
+        let predicted = value.predictedEndTranslation.width
+        let towardsJourneys = base > 0 || (base == 0 && predicted > 0)
+        let travel = towardsJourneys ? journeys : controls
+        guard travel > 0 else { withAnimation(.smooth) { dragX = nil }; return }
+        let landing = base + predicted / travel
         activity.touch()
         withAnimation(.smooth) {
-          journeysOpen = landing > 0.5
+          if landing > 0.5 && towardsJourneys {
+            openSide = .journeys
+          } else if landing < -0.5 && !towardsJourneys {
+            openSide = .controls
+          } else {
+            openSide = nil
+          }
           dragX = nil
         }
       }
@@ -395,9 +520,36 @@ struct ReaderShell: View {
     id.flatMap { id in Corpus.banis.first { $0.id == id } }
   }
 
-  private func setJourneys(open: Bool) {
+  private func setSide(_ side: Side?) {
     activity.touch()
-    withAnimation(.smooth) { journeysOpen = open }
+    withAnimation(.smooth) { openSide = side }
+  }
+
+  /// The Controls sidebar's `Settings` row. **On iPad, Controls closes first**, then
+  /// Settings opens as a window over the reader, not over a sidebar it would leave
+  /// half-covered (reading-shell.md#settings). On iPhone the sheet covers the
+  /// screen, and Controls stays open beneath it to come back to.
+  private func showSettings() {
+    guard horizontalSizeClass == .regular else {
+      settingsShown = true
+      return
+    }
+    activity.touch()
+    withAnimation(.smooth) { openSide = nil } completion: { settingsShown = true }
+  }
+
+  /// A long press on the viewer's Controls button: Settings straight from the
+  /// viewer, with no sidebar open, so closing it returns to the viewer
+  /// (reading-shell.md#settings).
+  private func showSettingsFromViewer() {
+    activity.touch()
+    settingsShown = true
+  }
+
+  /// A header button: opens its sidebar, or closes it if open. Opening one closes
+  /// the other.
+  private func toggle(_ side: Side) {
+    setSide(openSide == side ? nil : side)
   }
 
   /// Every path out of the sidebar closes it
@@ -408,7 +560,7 @@ struct ReaderShell: View {
     startLine = nil
     position.line = nil
     LastRead(id: bani.id, at: activity.last).save()
-    withAnimation(.smooth) { journeysOpen = false }
+    withAnimation(.smooth) { openSide = nil }
   }
 
   /// `continue reading`: opens `previous` at the line that was at its top.
@@ -419,7 +571,7 @@ struct ReaderShell: View {
     startLine = previous.line
     position.line = previous.line
     LastRead(id: previous.id, at: activity.last, line: previous.line).save()
-    withAnimation(.smooth) { journeysOpen = false }
+    withAnimation(.smooth) { openSide = nil }
   }
 
   /// Withdraws `continue reading` once `LastRead` no longer allows it, so a default
@@ -526,14 +678,34 @@ enum BarMetrics {
   static let typeSize: DynamicTypeSize = .large
 }
 
+/// Text Size in the interface: Journeys, Controls and Settings
+/// (docs/requirements/reading-shell.md#large-text). Never the reader or the preview,
+/// which are sized by Zoom; never the bars, pinned at `BarMetrics.typeSize`.
+enum InterfaceText {
+  /// **Text grows no further than this.** Past it the sliders' group on Settings'
+  /// Appearance page took most of an iPhone's screen, leaving the preview no room
+  /// (2026-10-19). The same on iPad, where Settings is a window of its own size.
+  static let cap: DynamicTypeSize = .accessibility3
+  /// **From this size on, the sliders' bylines are hidden**, everywhere they show:
+  /// they wrapped to several lines each, and the titles say enough on their own.
+  static let bylinesHiddenFrom: DynamicTypeSize = .accessibility1
+}
+
 extension View {
   /// A header button: a 44pt glass circle, as a navigation bar's are on iOS 26.
-  func barCircle() -> some View {
-    buttonStyle(.plain)
+  /// A long press shows the large content viewer unless `largeContentViewer` is
+  /// false, for a button whose long press does something else (`ControlsButton`).
+  @ViewBuilder
+  func barCircle(largeContentViewer: Bool = true) -> some View {
+    let circle = buttonStyle(.plain)
       .frame(width: BarMetrics.button, height: BarMetrics.button)
       .contentShape(.circle)
       .glassEffect(.regular.interactive(), in: .circle)
-      .accessibilityShowsLargeContentViewer()
+    if largeContentViewer {
+      circle.accessibilityShowsLargeContentViewer()
+    } else {
+      circle
+    }
   }
 }
 
@@ -547,6 +719,8 @@ private struct DefaultScreen: View {
   /// `continue reading`, which returns to where the bani was left.
   let onContinue: () -> Void
   let onJourneys: () -> Void
+  let onControls: () -> Void
+  let onSettings: () -> Void
 
   /// The system's Body text size: 17pt at the default Text Size, following the
   /// person's setting. The greeting and pills are sized from it, not from the
@@ -568,6 +742,24 @@ private struct DefaultScreen: View {
   }
 
   var body: some View {
+    // Centred when it fits; **scrolls when it does not**, as at the largest Text
+    // Size. Taller than the screen and not scrolling, it made the whole shell taller
+    // than the screen, and the Controls sidebar moved down by half the difference,
+    // taking its `Settings` row off the bottom (iPhone, 2026-10-22).
+    ViewThatFits(in: .vertical) {
+      greeting
+      ScrollView { greeting }
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(DesignTokens.background)
+    // No title, since nothing is being read; Controls is here too, so the preview
+    // and appearance are reachable before anything is open.
+    .safeAreaBar(edge: .top) {
+      ViewerBar(title: nil, onJourneys: onJourneys) { ControlsButton(action: onControls, onLongPress: onSettings) }
+    }
+  }
+
+  private var greeting: some View {
     VStack(spacing: 24) {
       Text("ਸਤਿ ਸ੍ਰੀ ਅਕਾਲ")
         .font(Fonts.variable(
@@ -602,10 +794,7 @@ private struct DefaultScreen: View {
       }
     }
     .padding()
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(DesignTokens.background)
-    // The Journeys button only: no title, since nothing is being read.
-    .safeAreaBar(edge: .top) { ViewerBar(title: nil, onJourneys: onJourneys) { EmptyView() } }
+    .frame(maxWidth: .infinity)
   }
 
   private var pillButtons: some View {
@@ -668,6 +857,8 @@ private struct JourneysPanel: View {
     // The list fades under the header rather than being cut
     // (reading-shell.md#header, interaction.md).
     .scrollEdgeEffectStyle(.hard, for: .top)
+    // No scroll bar in either sidebar (2026-10-19).
+    .scrollIndicators(.hidden)
     .safeAreaBar(edge: .top) { header }
   }
 

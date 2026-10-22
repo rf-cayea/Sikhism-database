@@ -111,9 +111,18 @@ disabled rather than subordinate.
 | weightPrimary | `550` |
 | weightLatin | `475` |
 | weightSecondary | `440` |
+| weightMin | `250` |
+| weightMax | `750` |
+| weightDefault | `500` |
 
 `weightLatin` is heavier than `weightSecondary` because Latin at the same axis value
 reads lighter than Gurmukhi does — different scripts, different apparent weight.
+
+**`weightMin`, `weightMax` and `weightDefault` are the reader's Weight control**
+([display-controls.md](../docs/requirements/display-controls.md#weight)). It sets
+the Gurmukhi line's weight; `weightPrimary`, `weightLatin` and `weightSecondary`
+then give each field's distance from it, so at the default every reader line is
+drawn 50 lighter than the table above. Interface text uses the table as it is.
 
 ## Type
 
@@ -126,6 +135,11 @@ as a ratio, not an absolute, so it holds at every zoom. 1.6 matches the web app'
 `line-height: 1.6`. Sant Lipi's own line box is 1.662 × its size, and iOS can only
 add space on top of a font's line box, never remove it, so iOS renders 1.662 and is
 slightly taller than Android. That difference is accepted.
+
+**Only Gurmukhi lines use it.** A secondary line — a pronunciation, a translation —
+takes its own font's line box at its own size, on both platforms. On Android it must
+set none rather than inherit one: the theme's is a fixed 24sp, and inherited, a
+secondary line's wrapped lines overlapped at a large Zoom (2026-10-22).
 
 `defaultSize` is the reader's Gurmukhi size on a phone at the system's default text
 size: the L row of [Starting size](#starting-size), which the generator checks.
@@ -156,6 +170,8 @@ tablet; folded, a phone.
 | Token | Value |
 | --- | --- |
 | ratioDefault | `0.6` |
+| ratioMin | `0.4` |
+| ratioMax | `1.0` |
 | defaultSize | `28` |
 | listSize | `20` |
 | uiGurmukhiRatio | `1.15` |

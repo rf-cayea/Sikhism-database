@@ -1,5 +1,8 @@
 package com.shabados.android
 
+import android.graphics.Color
+import androidx.activity.SystemBarStyle
+import androidx.compose.runtime.LaunchedEffect
 import android.content.Context
 import android.os.Bundle
 import android.os.SystemClock
@@ -52,10 +55,19 @@ class MainActivity : ComponentActivity() {
     Session.start(applicationContext)
     enableEdgeToEdge()
     setContent {
-      ShabadOSTheme(dark = isSystemInDarkTheme()) {
+      // Created after the starting size above is saved, so it reads that size.
+      val controls = remember { readerControls() }
+      val dark = controls.appearance.dark(isSystemInDarkTheme())
+      // The status and navigation bar icons follow the Appearance setting, not only
+      // the system's scheme.
+      LaunchedEffect(dark) {
+        val style = if (dark) SystemBarStyle.dark(Color.TRANSPARENT) else SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
+        enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+      }
+      ShabadOSTheme(dark = dark) {
         val assets = LocalContext.current.assets
         val banis = remember { Corpus.load(assets) }
-        ReaderShell(Session.shell, Session.readerKey, banis)
+        ReaderShell(Session.shell, Session.readerKey, banis, controls)
       }
     }
   }

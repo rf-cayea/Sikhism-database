@@ -44,8 +44,11 @@ const opacity = scalars('Opacity')
 const weight = scalars('Weight')
 const type = scalars('Type')
 
-for (const key of ['defaultSize', 'listSize', 'uiGurmukhiRatio', 'greetingRatio', 'pillRatio', 'lineHeightRatio', 'minSize', 'phoneMaxSize', 'padMaxSize', 'startingSizeFactor', 'padStartingSize', 'androidBodySize']) {
+for (const key of ['defaultSize', 'listSize', 'uiGurmukhiRatio', 'greetingRatio', 'pillRatio', 'lineHeightRatio', 'minSize', 'phoneMaxSize', 'padMaxSize', 'startingSizeFactor', 'padStartingSize', 'androidBodySize', 'ratioMin', 'ratioMax']) {
   if (type[key] === undefined) throw new Error(`packages/design/tokens.md: type.${key} missing`)
+}
+for (const key of ['weightMin', 'weightMax', 'weightDefault']) {
+  if (weight[key] === undefined) throw new Error(`packages/design/tokens.md: weight.${key} missing`)
 }
 for (const key of ['toner', 'tonerFaint']) {
   if (opacity[key] === undefined) throw new Error(`packages/design/tokens.md: opacity.${key} missing`)
@@ -138,8 +141,13 @@ ${Object.entries(color).map(([k, v]) => swiftColor(k, v)).join('\n\n')}
   static let weightPrimary: Double = ${weight.weightPrimary}
   static let weightLatin: Double = ${weight.weightLatin}
   static let weightSecondary: Double = ${weight.weightSecondary}
+  static let weightMin: Double = ${weight.weightMin}
+  static let weightMax: Double = ${weight.weightMax}
+  static let weightDefault: Double = ${weight.weightDefault}
 
   static let ratioDefault: Double = ${type.ratioDefault}
+  static let ratioMin: Double = ${type.ratioMin}
+  static let ratioMax: Double = ${type.ratioMax}
 
   static let defaultSize: Double = ${type.defaultSize}
   static let listSize: Double = ${type.listSize}
@@ -210,8 +218,13 @@ ${Object.entries(color).map(([k, v]) => kotlinColor(k, v)).join('\n\n')}
   const val WEIGHT_PRIMARY = ${weight.weightPrimary}f
   const val WEIGHT_LATIN = ${weight.weightLatin}f
   const val WEIGHT_SECONDARY = ${weight.weightSecondary}f
+  const val WEIGHT_MIN = ${weight.weightMin}f
+  const val WEIGHT_MAX = ${weight.weightMax}f
+  const val WEIGHT_DEFAULT = ${weight.weightDefault}f
 
   const val RATIO_DEFAULT = ${type.ratioDefault}f
+  const val RATIO_MIN = ${type.ratioMin}f
+  const val RATIO_MAX = ${type.ratioMax}f
 
   const val DEFAULT_SIZE = ${type.defaultSize}f
   const val LIST_SIZE = ${type.listSize}f

@@ -23,6 +23,9 @@ interface LastReadStore {
   fun set(value: LastRead)
 }
 
+/** Which sidebar: Journeys on the viewer's left, Controls on its right. */
+enum class Side { JOURNEYS, CONTROLS }
+
 /**
  * What the viewer shows, the journey's idle boundary
  * (docs/requirements/journeys.md#journeys), and what `continue reading` offers.
@@ -54,8 +57,12 @@ class ShellState(
 
   val previousId: String? get() = previous?.id
 
-  var journeysOpen by mutableStateOf(false)
+  /** The sidebar showing, if any: at most one at a time
+   * (docs/requirements/reading-shell.md#the-controls-sidebar). */
+  var openSide by mutableStateOf<Side?>(null)
     private set
+
+  val journeysOpen: Boolean get() = openSide == Side.JOURNEYS
 
   /** The line the reader opens at, by `ReaderItem.id`: where `continue reading` left
    * off, or null for the top. Read once, when a reader is created. */
@@ -83,7 +90,7 @@ class ShellState(
     openId = id
     startLine = null
     readingLine = null
-    journeysOpen = false
+    openSide = null
     store.set(LastRead(id, wallNow()))
   }
 
@@ -94,7 +101,7 @@ class ShellState(
     openId = read.id
     startLine = read.line
     readingLine = read.line
-    journeysOpen = false
+    openSide = null
     store.set(read.copy(atMs = wallNow()))
   }
 
@@ -111,29 +118,33 @@ class ShellState(
   }
 
   /**
-   * Opens or closes the Journeys sidebar. **Returns whether this opened it**, which
-   * is when the light haptic plays: on opening, by button or drag, never on closing
-   * (docs/interaction.md, "Opening a sidebar gives a light haptic").
+   * Shows [side], or neither sidebar for null; opening one closes the other.
+   * **Returns whether this opened a sidebar**, which is when the light haptic plays:
+   * on opening, by button or drag, never on closing (docs/interaction.md, "Opening a
+   * sidebar gives a light haptic").
    */
-  fun setJourneys(open: Boolean): Boolean {
+  fun setSide(side: Side?): Boolean {
     touch()
-    val opened = open && !journeysOpen
-    journeysOpen = open
+    val opened = side != null && side != openSide
+    openSide = side
     return opened
   }
 
-  /** System Back is the app's while the sidebar is open, and closes it
+  /** A header button: opens its sidebar, or closes it if it is open. */
+  fun toggle(side: Side): Boolean = setSide(if (openSide == side) null else side)
+
+  /** System Back is the app's while a sidebar is open, and closes it
    * (docs/interaction.md: "Android's system Back must close a sidebar"). Closed, Back
    * is left to the system. */
-  val handlesBack: Boolean get() = journeysOpen
+  val handlesBack: Boolean get() = openSide != null
 
   /** Whether the screen is held awake: content open in the viewer, no sidebar
    * (reading-shell.md#the-screen-stays-awake-while-content-is-read). The 15-minute
    * limit needs nothing here: going idle ends the journey, which closes the content. */
-  val keepsScreenOn: Boolean get() = openId != null && !journeysOpen
+  val keepsScreenOn: Boolean get() = openId != null && openSide == null
 
   fun back() {
-    setJourneys(open = false)
+    setSide(null)
   }
 
   /**
@@ -225,23 +236,34 @@ object Sidebar {
 
   /**
    * How far the viewer slides, which is also the sidebar's width: **the screen's
-   * short side less the peek, plus the inset at its left edge**, so the sidebar's
-   * contents are as wide in landscape as in portrait (decided 2026-10-16). In
-   * landscape the viewer then leaves more than the peek in view. Any units, as long
-   * as all four agree.
+   * short side less the peek, plus the inset at the sidebar's outer edge**, so the
+   * sidebar's contents are as wide in landscape as in portrait (decided 2026-10-16).
+   * In landscape the viewer then leaves more than the peek in view. Any units, as
+   * long as all four agree.
    *
-   * [leftInset] is a camera cutout or navigation bar on the left in landscape. The
-   * panel is padded clear of it inside this width, so without adding it back the
-   * panel was that much narrower in landscape (2026-10-19; iOS's
-   * `ReaderShell.travel` is the same rule). In portrait it is 0.
+   * [edgeInset] is a camera cutout or navigation bar on that side in landscape: the
+   * left for Journeys, the right for Controls. The panel is padded clear of it
+   * inside this width, so without adding it back the panel was that much narrower
+   * in landscape (2026-10-19; iOS's `ReaderShell.travel` is the same rule). In
+   * portrait it is 0.
    */
-  fun travel(width: Float, height: Float, peek: Float, leftInset: Float): Float =
-    (minOf(width, height) - peek + leftInset).coerceAtLeast(0f)
+  fun travel(width: Float, height: Float, peek: Float, edgeInset: Float): Float =
+    (minOf(width, height) - peek + edgeInset).coerceAtLeast(0f)
 
-  fun strength(progress: Float): Float =
-    START_STRENGTH + (1 - START_STRENGTH) * (progress / FULL_AT).coerceIn(0f, 1f)
+  /** Where the viewer rests with [side] open: 1 aside for Journeys (moved right),
+   * -1 aside for Controls (moved left), 0 over both. */
+  fun base(side: Side?): Float = when (side) {
+    Side.JOURNEYS -> 1f
+    Side.CONTROLS -> -1f
+    null -> 0f
+  }
 
-  fun scale(progress: Float): Float = START_SCALE + (1 - START_SCALE) * progress.coerceIn(0f, 1f)
+  /** How visible a sidebar is with the viewer moved [amount] of the way towards
+   * showing it, whichever side; [scale] likewise. */
+  fun strength(amount: Float): Float =
+    START_STRENGTH + (1 - START_STRENGTH) * (amount / FULL_AT).coerceIn(0f, 1f)
+
+  fun scale(amount: Float): Float = START_SCALE + (1 - START_SCALE) * amount.coerceIn(0f, 1f)
 
   /** What a drag is, once it has said. */
   enum class Axis { HORIZONTAL, OTHER }
@@ -249,13 +271,18 @@ object Sidebar {
   /**
    * What a one-finger drag that has moved ([dx], [dy]) is: null until it has moved
    * [decision] pixels, then decided once for its whole length. **Horizontal only if
-   * it is mostly sideways and towards a change**: rightward while closed, leftward
-   * while open. Anything else is a scroll, or a drag the other way, and is left
+   * it is mostly sideways and towards a change**: either way with both sidebars
+   * closed (right opens Journeys, left opens Controls), and only the closing way
+   * with one open. Anything else is a scroll, or a drag the other way, and is left
    * alone (docs/interaction.md, "Where the sidebar drag may start").
    */
-  fun judge(dx: Float, dy: Float, decision: Float, open: Boolean): Axis? {
+  fun judge(dx: Float, dy: Float, decision: Float, open: Side?): Axis? {
     if (maxOf(abs(dx), abs(dy)) < decision) return null
-    val towardsChange = if (open) dx < 0 else dx > 0
+    val towardsChange = when (open) {
+      Side.JOURNEYS -> dx < 0
+      Side.CONTROLS -> dx > 0
+      null -> true
+    }
     return if (abs(dx) > abs(dy) * HORIZONTAL_RATIO && towardsChange) Axis.HORIZONTAL else Axis.OTHER
   }
 
@@ -268,17 +295,31 @@ object Sidebar {
   fun startsInContent(x: Float, width: Float, leftEdge: Float, rightEdge: Float): Boolean =
     x >= leftEdge && x <= width - rightEdge
 
-  /** Where a drag of [dx] has moved the viewer to, from [open], over [travel]. */
-  fun progress(open: Boolean, dx: Float, travel: Float): Float {
-    val base = if (open) 1f else 0f
+
+  /**
+   * Where a drag of [dx] has moved the viewer to, from [open]: signed as [base],
+   * over [journeys]' travel towards Journeys and [controls]' towards Controls. A
+   * drag from rest goes whichever way it moves; from open it can only close.
+   */
+  fun progress(open: Side?, dx: Float, journeys: Float, controls: Float): Float {
+    val base = base(open)
+    val towardsJourneys = base > 0f || (base == 0f && dx > 0f)
+    val travel = if (towardsJourneys) journeys else controls
     if (travel <= 0f) return base
-    return (base + dx / travel).coerceIn(0f, 1f)
+    val moved = base + dx / travel
+    return if (towardsJourneys) moved.coerceIn(0f, 1f) else moved.coerceIn(-1f, 0f)
   }
 
-  /** Whether a drag released at [dx], moving at [velocityX] pixels a second, leaves
-   * the sidebar open: where a flick would carry it, past halfway. */
-  fun landsOpen(open: Boolean, dx: Float, velocityX: Float, travel: Float): Boolean =
-    progress(open, dx + velocityX * FLING_LOOKAHEAD_S, travel) > 0.5f
+  /** Which sidebar a drag released at [dx], moving at [velocityX] pixels a second,
+   * leaves open: where a flick would carry it, past halfway; null for neither. */
+  fun settle(open: Side?, dx: Float, velocityX: Float, journeys: Float, controls: Float): Side? {
+    val landing = progress(open, dx + velocityX * FLING_LOOKAHEAD_S, journeys, controls)
+    return when {
+      landing > 0.5f -> Side.JOURNEYS
+      landing < -0.5f -> Side.CONTROLS
+      else -> null
+    }
+  }
 }
 
 /** Tapping a line scrolls it to the top
@@ -294,4 +335,16 @@ object TapScroll {
    * the space before it (iOS's `tapLine`, verified there on screen recordings).
    */
   fun distance(index: Int, rowTop: Float): Float? = if (index == 0) null else rowTop
+}
+
+/**
+ * The reader's text under the Weight control (docs/requirements/display-controls.md#weight):
+ * **every reader line keeps its distance from the Gurmukhi line.** The tokens give
+ * each field's weight relative to `WEIGHT_PRIMARY`; the control replaces it and
+ * every field moves with it, kept inside the font's 100–900 axis. iOS's `ReaderType`
+ * is the same rule.
+ */
+object ReaderWeight {
+  fun of(token: Float, control: Float): Float =
+    (token + control - DesignTokens.WEIGHT_PRIMARY).coerceIn(100f, 900f)
 }

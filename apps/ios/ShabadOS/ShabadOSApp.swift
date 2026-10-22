@@ -11,6 +11,27 @@ struct ShabadOSApp: App {
     WindowGroup {
       ReaderShell()
         .modifier(StartingSize())
+        .modifier(AppliedAppearance())
+    }
+  }
+}
+
+/// Applies the `Appearance` setting to every window
+/// (docs/requirements/display-controls.md#appearance), so the whole app follows it,
+/// sheets and menus included.
+///
+/// **The window's `overrideUserInterfaceStyle`, not `.preferredColorScheme`**: going
+/// back to Auto must hand the choice to the system again, which `nil` passed to
+/// `.preferredColorScheme` has not reliably done once a scheme was set.
+private struct AppliedAppearance: ViewModifier {
+  @AppStorage(Appearance.key) private var appearance = Appearance.auto.rawValue
+
+  func body(content: Content) -> some View {
+    content.onChange(of: appearance, initial: true) { _, raw in
+      let style = (Appearance(rawValue: raw) ?? .auto).interfaceStyle
+      for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
+        for window in scene.windows { window.overrideUserInterfaceStyle = style }
+      }
     }
   }
 }
@@ -23,26 +44,27 @@ struct ShabadOSApp: App {
 /// keeps the reader size they have, and a size they set by pinch is never
 /// overwritten. Attached at the root so it runs before the reader can open; the
 /// reader itself only ever reads the saved value.
-private struct StartingSize: ViewModifier {
+struct StartingSize: ViewModifier {
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
   func body(content: Content) -> some View {
     content.onAppear {
       let defaults = UserDefaults.standard
       guard defaults.object(forKey: BaniReaderView.fontSizeKey) == nil else { return }
-      // The Body size iOS uses at this person's Text Size setting, asked for
-      // explicitly by setting rather than through UITraitCollection.current, which
-      // is not guaranteed to be populated inside onAppear.
-      let traits = UITraitCollection(preferredContentSizeCategory: UIContentSizeCategory(dynamicTypeSize))
-      let body = UIFont.preferredFont(forTextStyle: .body, compatibleWith: traits).pointSize
-      defaults.set(
-        DesignTokens.startingSize(
-          isPad: UIDevice.current.userInterfaceIdiom == .pad,
-          bodySize: body
-        ),
-        forKey: BaniReaderView.fontSizeKey
-      )
+      defaults.set(Self.deviceSize(at: dynamicTypeSize), forKey: BaniReaderView.fontSizeKey)
     }
+  }
+
+  /// The starting size this device is given at `dynamicTypeSize`: on a first launch,
+  /// and again by Settings' Reset (reading-shell.md#settings).
+  ///
+  /// The Body size iOS uses at that Text Size setting is asked for explicitly by
+  /// setting rather than through UITraitCollection.current, which is not guaranteed
+  /// to be populated inside onAppear.
+  @MainActor static func deviceSize(at dynamicTypeSize: DynamicTypeSize) -> Double {
+    let traits = UITraitCollection(preferredContentSizeCategory: UIContentSizeCategory(dynamicTypeSize))
+    let body = UIFont.preferredFont(forTextStyle: .body, compatibleWith: traits).pointSize
+    return DesignTokens.startingSize(isPad: UIDevice.current.userInterfaceIdiom == .pad, bodySize: body)
   }
 }
 

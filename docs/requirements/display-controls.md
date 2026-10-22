@@ -32,15 +32,19 @@ a person's settings are silently rewritten by whatever they happened to open.
 
 Font size of the reading area.
 
-> *Use pinch-to-zoom to change font size in the viewer.*
+> *The overall size of text*
 
 **The slider and the pinch gesture are the same value**, and the slider must track
-a pinch made while it is not visible. The byline exists to teach the gesture; the
-slider is the fallback for someone who cannot make it.
+a pinch made while it is not visible. The slider is the fallback for someone who
+cannot make the gesture. (The byline taught the gesture until 2026-10-19; it now
+says what the slider changes, as the other two do.)
 
 **There are no A−/A+ buttons** (2026-10-16), on either platform: pinch and this
-slider are the only ways to change the size. Until the Controls sidebar exists,
-pinch is the only one.
+slider are the only ways to change the size.
+
+**The slider is continuous** (2026-10-19): it takes any value in the device's range,
+so whatever size a pinch lands on, the slider shows and can return to. The stored
+size is whatever the platform reports, kept to a couple of decimal places.
 
 Sizing bounds and starting sizes live in `packages/design/tokens.md` and are generated
 into the apps. They are not to be restated in platform code, or here.
@@ -62,8 +66,9 @@ reader from there.
 - **On iPad or an Android tablet, it is one fixed size, whatever the setting**, in
   both orientations. An Android tablet is a device whose smallest screen width is at
   least 600dp.
-- **It is saved, then never recomputed.** Changing the system setting afterwards
-  does not move the reader. A size someone sets by pinch or the slider always wins (see
+- **It is saved, then never recomputed** — except by Settings' Reset
+  ([reading-shell.md](reading-shell.md#settings)), which works it out again at the
+  current setting. Changing the system setting afterwards does not move the reader. A size someone sets by pinch or the slider always wins (see
   [Persistence](#persistence)).
 
 Applies to iOS and Android. **The system setting picks only this first size**: the
@@ -78,7 +83,7 @@ around 14–18px and reader Gurbani around 23–30px. See [Open questions](#open
 Size of the secondary lines — translations, pronunciations — relative to the
 Gurmukhi line.
 
-> *Set the font size relative to the first line.*
+> *Size relative to primary*
 
 **The current formulation is a divisor and it runs backwards.** Today the value is
 `gurmukhi ÷ secondary`, from **1** (secondary the same size as the Gurmukhi) to
@@ -87,15 +92,15 @@ the secondary text *smaller*, which is the opposite of what a slider that grows 
 the right means.
 
 **The fix is to store the thing being adjusted, not its reciprocal.** Store
-**secondary size as a percentage of the Gurmukhi size**: `40%` to `100%`, in steps
-of `5%`. **The default is `60%`**, decided by the author 2026-10-15 (the
+**secondary size as a fraction of the Gurmukhi size**: `0.4` to `1.0` (40% to 100%),
+**continuous** (2026-10-19; it had been 13 stops of 5%). **The default is `60%`**, decided by the author 2026-10-15 (the
 `ratioDefault` token, [`packages/design/tokens.md`](../../packages/design/tokens.md#type)).
 
 | | Old | New |
 | --- | --- | --- |
 | Left end | 1 (secondary equals Gurmukhi) | 40% (Gurmukhi 2.5× larger) |
 | Right end | 2.5 (Gurmukhi 2.5× larger) | 100% (secondary equals Gurmukhi) |
-| Stops | 13 | 13 |
+| Stops | 13 | continuous |
 | Direction | right = smaller | right = bigger |
 | Spacing | uneven in rendered size | even in rendered size |
 
@@ -106,13 +111,26 @@ number moving opposite to the control, which every future reader of the code has
 re-derive. It also fixes the spacing: reciprocal steps cluster at one end, so the
 old slider's stops were visibly uneven in the thing a person is actually looking at.
 
+**Ratio moves every line that is not the Gurmukhi** — pronunciations, translations,
+interpretations. Every other slider moves only the Gurmukhi line.
+
 **Migration from a stored divisor:** `percent = round(100 / divisor / 5) × 5`.
 
 ### Weight
 
-> *Adjust the thickness of text.*
+> *Thickness of lines/strokes*
 
-**250 to 750, in steps of 25, default 500.**
+**250 to 750, continuous, default 500** (2026-10-19; it had been steps of 25). The
+bounds and default are `weightMin`, `weightMax` and `weightDefault` in
+[`tokens.md`](../../packages/design/tokens.md#weight). Stored as `weight`.
+
+**The slider sets the Gurmukhi line's weight, and every other line in the reader
+keeps its distance from it** (decided 2026-10-19). The tokens' weights are each
+field's place relative to `weightPrimary`: at the default the Gurmukhi is 500 and a
+pronunciation, normally 110 lighter, is 390; slide to 650 and it is 540. So a
+presenter who wants bolder text gets bolder secondary lines too. Titles keep their
+distance the same way. Every result stays inside the font's axis. Interface text —
+the sidebars, the default screen — does not follow it.
 
 Verified: the bundled `SantLipi-VF.ttf` exposes a `wght` axis spanning **100–900**,
 so the whole range is inside the font and needs no synthetic emboldening. Do not
@@ -867,11 +885,14 @@ have the same effect, on any platform, gets the same answer.
 
 ## Appearance
 
-**`Light`, `Dark`, `Auto`. Default `Auto`**, following the system scheme.
+**`Light`, `Dark`, `System`. Default `System`**, following the system scheme. Stored as
+`appearance`: `auto` (shown as `System`), `light` or `dark`. It applies to the whole
+app, not only the reader.
 
 Placed at the **right of the Controls sidebar header**, beside the title — an icon,
 not a row in the list, because it is the one setting people change for reasons that
-have nothing to do with what they are reading.
+have nothing to do with what they are reading. Also in Settings, as a picker of three
+pictures ([reading-shell.md](reading-shell.md#settings)).
 
 ## What a test must pin down
 

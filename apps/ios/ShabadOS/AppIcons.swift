@@ -144,6 +144,10 @@ enum AppIcons {
   /// SF Symbols, iOS 14.0+.
   static let undo = "arrow.uturn.backward"
 
+  /// Reset Settings' Appearance (zoom, ratio, weight) to the original settings, after a confirmation. Drawn in red.
+  /// SF Symbols, iOS 18.0+.
+  static let reset = "clock.arrow.trianglehead.counterclockwise.rotate.90"
+
   /// Share a journey — a bookmark position, or a Defined journey. PROPOSED.
   /// SF Symbols, iOS 13.0+.
   static let share = "square.and.arrow.up"
@@ -160,15 +164,15 @@ enum AppIcons {
   /// SF Symbols, iOS 13.0+.
   static let streak = "flame"
 
-  /// Advanced settings, one level beyond the Controls sidebar. PROPOSED.
+  /// Open Settings, from the Controls sidebar's footer row.
   /// SF Symbols, iOS 14.0+.
   static let settings = "gearshape"
 
-  /// Return from Settings to the Controls sidebar. PROPOSED.
+  /// Android Settings' top left on every page: closes Settings from its first page, returns to it from the others. iOS's navigation draws its own.
   /// SF Symbols, iOS 14.0+.
   static let back = "chevron.backward"
 
-  /// Close a tab. Removes it from the journey permanently; the timeline keeps it. PROPOSED.
+  /// Close Settings: the ✕ at the top right of its first page, on iOS only (Android uses Back). Also proposed for closing a tab, which removes it from the journey permanently; the timeline keeps it.
   /// SF Symbols, iOS 13.0+.
   static let close = "xmark"
 

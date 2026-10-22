@@ -102,6 +102,9 @@ object AppIcons {
   /** Restore a removed entry to its original position. PROPOSED. */
   const val undo = "ic_undo"
 
+  /** Reset Settings' Appearance (zoom, ratio, weight) to the original settings, after a confirmation. Drawn in red. */
+  const val reset = "ic_reset"
+
   /** Share a journey — a bookmark position, or a Defined journey. PROPOSED. */
   const val share = "ic_share"
 
@@ -114,13 +117,13 @@ object AppIcons {
   /** Consecutive days with a complete Defined instance. PROPOSED. */
   const val streak = "ic_streak"
 
-  /** Advanced settings, one level beyond the Controls sidebar. PROPOSED. */
+  /** Open Settings, from the Controls sidebar's footer row. */
   const val settings = "ic_settings"
 
-  /** Return from Settings to the Controls sidebar. PROPOSED. */
+  /** Android Settings' top left on every page: closes Settings from its first page, returns to it from the others. iOS's navigation draws its own. */
   const val back = "ic_back"
 
-  /** Close a tab. Removes it from the journey permanently; the timeline keeps it. PROPOSED. */
+  /** Close Settings: the ✕ at the top right of its first page, on iOS only (Android uses Back). Also proposed for closing a tab, which removes it from the journey permanently; the timeline keeps it. */
   const val close = "ic_close"
 
   /** A tracked collection or bookmark. PROPOSED. */

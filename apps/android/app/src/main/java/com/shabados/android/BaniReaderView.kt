@@ -19,7 +19,6 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.scrollBy
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,11 +37,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -72,6 +68,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -83,6 +80,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextMotion
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Job
@@ -142,19 +140,31 @@ private const val HIGHLIGHT_FADE_MS = 250
  *   pixels, so a pinch moves text in visible jumps rather than continuously. Always on,
  *   not just during a pinch: switching on release could move line breaks, and with
  *   them the row the pinch just put back.
+ * - **No inherited line height** ([readerTextStyle]).
  *
  * Only reading text goes inside this; the header and the Expand button keep following
  * the system setting like the rest of the platform's UI.
  */
 @Composable
-private fun ReaderText(content: @Composable () -> Unit) {
+internal fun ReaderText(content: @Composable () -> Unit) {
   val density = LocalDensity.current
   CompositionLocalProvider(
     LocalDensity provides Density(density.density, fontScale = 1f),
-    LocalTextStyle provides LocalTextStyle.current.copy(textMotion = TextMotion.Animated),
+    LocalTextStyle provides readerTextStyle(LocalTextStyle.current),
     content = content,
   )
 }
+
+/**
+ * [ReaderText]'s style over the theme's. **The theme's line height is removed**: it
+ * is a fixed sp (Body's 24), so a secondary line that set no line height of its own
+ * kept 24sp at every Zoom and its wrapped lines overlapped once the text grew past it
+ * (Pixel 7a, 2026-10-22). Without one, a line takes its font's own line box at its
+ * own size, as on iOS; the Gurmukhi line sets `lineHeightRatio` explicitly
+ * (packages/design/tokens.md#type).
+ */
+internal fun readerTextStyle(theme: TextStyle): TextStyle =
+  theme.copy(textMotion = TextMotion.Animated, lineHeight = TextUnit.Unspecified)
 
 private fun vishraamColor(weight: Vishraam, dark: Boolean): Color =
   when (weight) {
@@ -314,12 +324,18 @@ private fun expand(items: List<ReaderItem>, expandedIds: Set<String>): List<Read
  * `gurmukhiFont`'s own comment) and threaded down, rather than rebuilt by every
  * row each time it scrolls back into view — `LazyColumn` disposes off-screen row
  * composables, which would otherwise re-run a per-row `remember` on every
- * re-entry. */
-private class GurmukhiFonts(assets: AssetManager) {
-  val title = gurmukhiFont(assets, Title.WEIGHT)
-  val body = gurmukhiFont(assets, DesignTokens.WEIGHT_PRIMARY.roundToInt())
-  val secondary = gurmukhiFont(assets, DesignTokens.WEIGHT_SECONDARY.roundToInt())
-  val ikOankar = gurmukhiFont(assets, Title.IK_OANKAR_WEIGHT)
+ * re-entry.
+ *
+ * Built at the Weight control's [weight]: every field keeps its distance from the
+ * Gurmukhi line ([ReaderWeight]). Rebuilt when the weight changes, in whole axis
+ * units, which is as fine as the font's `wght` axis is set. */
+internal class GurmukhiFonts(assets: AssetManager, weight: Float) {
+  val title = gurmukhiFont(assets, ReaderWeight.of(Title.WEIGHT.toFloat(), weight).roundToInt())
+  val body = gurmukhiFont(assets, ReaderWeight.of(DesignTokens.WEIGHT_PRIMARY, weight).roundToInt())
+  val secondary = gurmukhiFont(assets, ReaderWeight.of(DesignTokens.WEIGHT_SECONDARY, weight).roundToInt())
+  val ikOankar = gurmukhiFont(assets, ReaderWeight.of(Title.IK_OANKAR_WEIGHT.toFloat(), weight).roundToInt())
+  /** The system font's weight for a Latin secondary line. */
+  val latin = FontWeight(ReaderWeight.of(DesignTokens.WEIGHT_LATIN, weight).roundToInt())
 }
 
 @Composable
@@ -332,7 +348,7 @@ private fun LineRow(
   fonts: GurmukhiFonts,
   precededByTitle: Boolean,
 ) {
-  val dark = isSystemInDarkTheme()
+  val dark = LocalDark.current
   val isTitle = line.isHeading || line.isMoolmantar
   val titleSize = size * Title.sizeRatio(line.isHeading, line.isMoolmantar)
 
@@ -374,7 +390,7 @@ private fun LineRow(
         Text(
           text = Transliteration.of(line, scheme),
           fontFamily = if (scheme == Pronunciation.DEVANAGARI) fonts.secondary else FontFamily.Default,
-          fontWeight = if (scheme == Pronunciation.LATIN) FontWeight(DesignTokens.WEIGHT_LATIN.roundToInt()) else null,
+          fontWeight = if (scheme == Pronunciation.LATIN) fonts.latin else null,
           fontSize = secondary.sp,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
           textAlign = if (isTitle) TextAlign.Center else TextAlign.Start,
@@ -480,48 +496,40 @@ private fun ContinuationCard(
 private val StringSetSaver = listSaver<Set<String>, String>(save = { it.toList() }, restore = { it.toSet() })
 
 /** The reader: [bani] under the viewer's header, whose Journeys button calls
- * [onJourneys]. It opens with [startLine] at the top (`continue reading`; null for
+ * [onJourneys], and whose Controls button calls [onControls], or [onSettings] when
+ * long-pressed. It opens with [startLine] at the top (`continue reading`; null for
  * the top of the bani) and reports the line at the top as it scrolls ([onTopLine]),
  * both by `ReaderItem.id`. */
 @Composable
-fun BaniReader(bani: Bani, startLine: String?, onTopLine: (String) -> Unit, onJourneys: () -> Unit) {
+fun BaniReader(
+  bani: Bani,
+  controls: ReaderControls,
+  startLine: String?,
+  onTopLine: (String) -> Unit,
+  onJourneys: () -> Unit,
+  onControls: () -> Unit,
+  onSettings: () -> Unit,
+) {
   val context = LocalContext.current
-  val fonts = remember(context.assets) { GurmukhiFonts(context.assets) }
+  val weightAxis = controls.weight.roundToInt()
+  val fonts = remember(context.assets, weightAxis) { GurmukhiFonts(context.assets, weightAxis.toFloat()) }
   val isTablet = LocalConfiguration.current.isTablet
 
-  // Saved across launches (docs/requirements/display-controls.md#persistence). The
-  // starting size was written before any UI, in MainActivity, so the default here
-  // is only a fallback for a store that cannot be read.
-  val sizeStore = remember(context) { context.readerSizeStore() }
-  var savedSize by remember { mutableFloatStateOf(sizeStore.get() ?: DesignTokens.DEFAULT_SIZE) }
+  // Saved across launches and shared with the Controls sidebar
+  // (docs/requirements/display-controls.md#persistence). The starting size was
+  // written before any UI, in MainActivity.
+  val savedSize = controls.size
   fun saveSize(value: Float) {
-    savedSize = value
-    sizeStore.set(value)
+    controls.size = value
   }
   /** The size during a pinch, saved only when the fingers lift. */
   var livePinchSize by remember { mutableStateOf<Float?>(null) }
   val readerSize = livePinchSize ?: ReaderSize.displaySize(savedSize, isTablet)
 
-  // Saved across launches, as on iOS (docs/requirements/display-controls.md#persistence),
-  // the same way as the size above: read once, written on each change. That also
-  // brings them back after the activity is recreated, so they need no saveable state.
-  val settings = remember(context) { context.readerSettings() }
-  var pauses by remember { mutableStateOf(settings.pauses) }
-  var pronDevanagari by remember { mutableStateOf(settings.pronDevanagari) }
-  var pronLatin by remember { mutableStateOf(settings.pronLatin) }
-  val ratio = remember { settings.ratio }
-  fun savePauses(value: Boolean) {
-    pauses = value
-    settings.pauses = value
-  }
-  fun savePronDevanagari(value: Boolean) {
-    pronDevanagari = value
-    settings.pronDevanagari = value
-  }
-  fun savePronLatin(value: Boolean) {
-    pronLatin = value
-    settings.pronLatin = value
-  }
+  val pauses = controls.pauses
+  val pronDevanagari = controls.pronDevanagari
+  val pronLatin = controls.pronLatin
+  val ratio = controls.ratio
   val schemes = remember(pronDevanagari, pronLatin) {
     buildList {
       if (pronDevanagari) add(Pronunciation.DEVANAGARI)
@@ -748,29 +756,7 @@ fun BaniReader(bani: Bani, startLine: String?, onTopLine: (String) -> Unit, onJo
       }
     }
     ViewerHeader(title = bani.latin, onJourneys = onJourneys) {
-      // A stand-in for the Controls sidebar, which is not built. Sized in dp, so
-      // the system Font size cannot widen it.
-      var menuOpen by remember { mutableStateOf(false) }
-      IconButton(onClick = { menuOpen = true }, colors = chromeIconButtonColors()) {
-        Icon(painterResource(R.drawable.ic_controls), contentDescription = "Controls")
-      }
-      DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-        DropdownMenuItem(
-          text = { Text("Pauses") },
-          trailingIcon = { Checkbox(checked = pauses, onCheckedChange = { savePauses(it) }) },
-          onClick = { savePauses(!pauses) },
-        )
-        DropdownMenuItem(
-          text = { Text(Pronunciation.DEVANAGARI.label) },
-          trailingIcon = { Checkbox(checked = pronDevanagari, onCheckedChange = { savePronDevanagari(it) }) },
-          onClick = { savePronDevanagari(!pronDevanagari) },
-        )
-        DropdownMenuItem(
-          text = { Text(Pronunciation.LATIN.label) },
-          trailingIcon = { Checkbox(checked = pronLatin, onCheckedChange = { savePronLatin(it) }) },
-          onClick = { savePronLatin(!pronLatin) },
-        )
-      }
+      ControlsButton(onClick = onControls, onLongClick = onSettings)
     }
   }
 }
